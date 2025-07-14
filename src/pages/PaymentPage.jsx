@@ -1,3 +1,4 @@
+// src/pages/PaymentPage.jsx
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Banknote, CreditCard, CheckCircle, QrCode } from 'lucide-react';
@@ -9,38 +10,22 @@ export default function PaymentPage({ order, updateOrderStatus, navigateTo }) {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handlePayment = () => {
+    // ... (keep existing logic) ...
     if (!selectedMethod) {
-      toast({
-        title: "Pilih Metode Pembayaran",
-        description: "Anda harus memilih salah satu metode pembayaran.",
-        variant: "destructive",
-        duration: 3000,
-      });
+      toast({ title: "No Method Selected", description: "Please choose a payment method.", variant: "destructive", duration: 3000 });
       return;
     }
-
     setIsProcessing(true);
-    // Simulate payment processing
     setTimeout(() => {
+      // Simulate different outcomes
       if (selectedMethod === 'cashier') {
-        toast({
-          title: "Silakan Bayar di Kasir",
-          description: "Tunjukkan nomor pesanan Anda di kasir untuk menyelesaikan pembayaran.",
-          duration: 5000,
-        });
+        toast({ title: "Proceed to Cashier", description: "Please show your order number at the cashier to pay.", duration: 5000 });
       } else {
-        toast({
-          title: "Pembayaran Berhasil!",
-          description: "Terima kasih! Pesanan Anda telah dibayar.",
-          duration: 5000,
-        });
+        toast({ title: "Payment Successful!", description: "Thank you! Your order has been paid.", duration: 5000 });
       }
-      
-      // We don't mark as completed here, only cashier can do that.
-      // But we can move it to 'preparing' if it was pending
-      if (order.status === 'pending') {
-          updateOrderStatus(order.id, 'preparing');
-      }
+
+      // Update status to 'preparing' regardless of payment method
+      updateOrderStatus(order.id, 'preparing');
 
       setIsProcessing(false);
       navigateTo('receipt');
@@ -49,89 +34,74 @@ export default function PaymentPage({ order, updateOrderStatus, navigateTo }) {
 
   if (!order) {
     return (
-      <div className="text-center py-20">
-        <h2 className="text-2xl text-gray-400">Pesanan tidak ditemukan.</h2>
+      <div className="min-h-screen flex items-center justify-center text-center p-6">
+        <h2 className="text-2xl text-gray-400">Could not find your order.</h2>
       </div>
     );
   }
 
   const paymentMethods = [
-    { id: 'online', name: 'Online Transfer', icon: CreditCard, description: 'Bayar sekarang via transfer bank atau e-wallet.' },
-    { id: 'qris', name: 'QRIS', icon: QrCode, description: 'Scan kode QR untuk membayar.' },
-    { id: 'cashier', name: 'Bayar di Kasir', icon: Banknote, description: 'Bayar tunai atau kartu di meja kasir.' },
+    { id: 'online', name: 'Credit/Debit Card', icon: CreditCard, description: 'Pay securely with your card.' },
+    { id: 'qris', name: 'QRIS Payment', icon: QrCode, description: 'Scan QR code with your e-wallet.' },
+    { id: 'cashier', name: 'Pay at Cashier', icon: Banknote, description: 'Pay with cash or card at the counter.' },
   ];
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-12">
+    <div className="min-h-screen flex items-center justify-center p-6">
       <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center mb-12"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-2xl mx-auto"
       >
-        <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
-          Pembayaran
-        </h1>
-        <p className="text-lg text-gray-300">
-          Pilih metode pembayaran yang paling nyaman untuk Anda.
-        </p>
-      </motion.div>
+        <div className="text-center mb-12">
+          <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
+            Secure Payment
+          </h1>
+          <p className="text-lg text-gray-300">Choose your preferred way to complete the transaction.</p>
+        </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-8 space-y-6"
-      >
-        <div>
-          <h3 className="text-lg font-medium text-gray-200 mb-4">Pilih Metode Pembayaran</h3>
+        <div className="bg-gray-900/50 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl shadow-black/20 space-y-6">
           <div className="space-y-4">
             {paymentMethods.map(method => (
               <motion.div
                 key={method.id}
-                whileHover={{ scale: 1.02 }}
+                whileHover={{ scale: 1.03 }}
                 onClick={() => setSelectedMethod(method.id)}
-                className={`p-6 rounded-2xl flex items-center cursor-pointer transition-all duration-300 border-2 ${
-                  selectedMethod === method.id
-                    ? 'bg-amber-500/20 border-amber-400'
-                    : 'bg-white/10 border-white/20 hover:border-white/40'
-                }`}
+                className={`p-5 rounded-2xl flex items-center cursor-pointer transition-all duration-300 border-2 ${selectedMethod === method.id
+                    ? 'bg-amber-500/10 border-amber-400'
+                    : 'bg-white/10 border-transparent hover:border-white/30'
+                  }`}
               >
-                <div className={`w-12 h-12 flex items-center justify-center rounded-xl mr-6 bg-gradient-to-br from-amber-400 to-orange-500 text-white`}>
-                  <method.icon className="w-6 h-6" />
-                </div>
+                <method.icon className={`w-8 h-8 mr-5 text-amber-400`} />
                 <div className="flex-1">
                   <h4 className="font-bold text-lg text-white">{method.name}</h4>
-                  <p className="text-sm text-gray-300">{method.description}</p>
+                  <p className="text-sm text-gray-400">{method.description}</p>
                 </div>
                 {selectedMethod === method.id && (
-                  <CheckCircle className="w-6 h-6 text-green-400" />
+                  <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }}>
+                    <CheckCircle className="w-7 h-7 text-green-400" />
+                  </motion.div>
                 )}
               </motion.div>
             ))}
           </div>
-        </div>
 
-        <div className="border-t border-white/20 pt-6">
-           <Button
-              onClick={() => navigateTo('receipt')}
-              variant="outline"
-              className="w-full mb-4 text-amber-400 border-amber-400/50 hover:bg-amber-400/10"
-            >
-              Bayar Nanti
-            </Button>
+          <div className="border-t border-white/10 pt-6 space-y-4">
             <Button
               onClick={handlePayment}
-              disabled={isProcessing}
-              className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-4 text-lg rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isProcessing || !selectedMethod}
+              className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-4 text-lg rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-green-500/20 disabled:opacity-50"
             >
-              {isProcessing ? (
-                <div className="flex items-center justify-center">
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-3" />
-                  Memproses...
-                </div>
-              ) : `Konfirmasi Pembayaran`
-              }
+              {isProcessing ? 'Processing...' : `Confirm & Pay ${order.total.toLocaleString('id-ID', { style: 'currency', currency: 'IDR' })}`}
             </Button>
+            <Button
+              onClick={() => navigateTo('receipt')}
+              variant="ghost"
+              className="w-full text-gray-400 hover:bg-white/10 hover:text-white"
+            >
+              Pay Later at Cashier
+            </Button>
+          </div>
         </div>
       </motion.div>
     </div>

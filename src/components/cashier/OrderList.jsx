@@ -1,26 +1,28 @@
+// src/components/cashier/OrderList.jsx
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import OrderCard from '@/components/cashier/OrderCard';
+import { Archive } from 'lucide-react';
 
 export default function OrderList({ orders, updateOrderStatus, viewReceipt }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <AnimatePresence>
         {orders.length === 0 ? (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-12"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center py-20"
           >
-            <div className="text-6xl mb-4">📋</div>
-            <h3 className="text-xl font-semibold text-gray-300 mb-2">Tidak ada pesanan</h3>
-            <p className="text-gray-400">Pesanan akan muncul di sini setelah pelanggan memesan</p>
+            <Archive className="w-16 h-16 mx-auto text-gray-600 mb-4" />
+            <h3 className="text-2xl font-semibold text-white mb-2">No Orders Found</h3>
+            <p className="text-gray-400">Orders matching your filters will appear here.</p>
           </motion.div>
         ) : (
           orders.map((order, index) => (
-            <OrderCard 
-              key={order.id} 
-              order={order} 
+            <OrderCard
+              key={order.id}
+              order={order}
               index={index}
               updateOrderStatus={updateOrderStatus}
               viewReceipt={viewReceipt}

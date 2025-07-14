@@ -1,43 +1,59 @@
+// src/components/cashier/CashierFilters.jsx
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Search, Filter } from 'lucide-react';
+import { Search, ListFilter, Clock, UtensilsCrossed, CheckCircle, XCircle } from 'lucide-react';
+
+const filterOptions = [
+  { value: 'all', label: 'All', icon: ListFilter },
+  { value: 'pending', label: 'Pending', icon: Clock },
+  { value: 'preparing', label: 'Preparing', icon: UtensilsCrossed },
+  { value: 'completed', label: 'Completed', icon: CheckCircle },
+  { value: 'cancelled', label: 'Cancelled', icon: XCircle },
+];
 
 export default function CashierFilters({ searchTerm, setSearchTerm, statusFilter, setStatusFilter }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.3 }}
-      className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 mb-8"
+      transition={{ delay: 0.2 }}
+      className="bg-gray-900/50 backdrop-blur-xl border border-white/10 rounded-2xl p-4 mb-8"
     >
       <div className="flex flex-col md:flex-row gap-4">
-        <div className="flex-1">
+        {/* Search Input */}
+        <div className="flex-grow">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
             <input
               type="text"
-              placeholder="Cari pesanan, nama, atau nomor meja..."
+              placeholder="Search by Order #, Name, or Table..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-amber-500/80 transition-shadow"
             />
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <Filter className="w-5 h-5 text-gray-400" />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-          >
-            <option value="all">Semua Status</option>
-            <option value="pending">Menunggu</option>
-            <option value="preparing">Sedang Dibuat</option>
-            <option value="ready">Siap Disajikan</option>
-            <option value="completed">Selesai</option>
-            <option value="cancelled">Dibatalkan</option>
-          </select>
+        {/* Status Filter Buttons */}
+        <div className="flex items-center justify-center bg-black/20 p-1 rounded-lg">
+          {filterOptions.map(option => (
+            <button
+              key={option.value}
+              onClick={() => setStatusFilter(option.value)}
+              className={`relative px-3 py-2 text-sm font-medium rounded-md flex items-center gap-2 transition-colors duration-300 ${statusFilter === option.value ? 'text-white' : 'text-gray-400 hover:text-white'
+                }`}
+            >
+              <option.icon className="w-4 h-4" />
+              <span>{option.label}</span>
+              {statusFilter === option.value && (
+                <motion.div
+                  layoutId="activeFilter"
+                  className="absolute inset-0 bg-amber-500/80 rounded-md -z-10"
+                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                />
+              )}
+            </button>
+          ))}
         </div>
       </div>
     </motion.div>
