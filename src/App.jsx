@@ -101,16 +101,29 @@ function App() {
         <meta name="description" content="A modern, high-end web application for coffee shop ordering and cashier management." />
       </Helmet>
 
+
+
       {/* Main App Container */}
       <div className="min-h-screen w-full bg-gray-900 text-white relative overflow-x-hidden">
         {/* Background Effects */}
-        <div className="absolute inset-0 -z-20">
-          <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black" />
+        {/* Animated Background Effects */}
+        <div className="absolute inset-0 z-0">
           <div
-            className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:36px_36px]"
-            style={{ maskImage: 'radial-gradient(ellipse at center, white 10%, transparent 60%)' }}
+            className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0f_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0f_1px,transparent_1px)] bg-[size:48px_48px]"
+            style={{ maskImage: 'radial-gradient(ellipse 80% 50% at 50% 0%, white 0%, transparent 100%)' }}
           />
-          <div className="absolute top-1/2 left-1/2 -z-10 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-500/10 blur-[150px] animate-pulse" />
+          <motion.div
+            className="absolute bottom-0 left-[-20%] right-[-20%] top-[20%] h-[500px] rounded-full bg-amber-500/10 blur-[150px]"
+            animate={{
+              transform: ['translateX(-10%)', 'translateX(10%)', 'translateX(-10%)'],
+            }}
+            transition={{
+              duration: 20,
+              ease: "linear",
+              repeat: Infinity,
+              repeatType: "mirror",
+            }}
+          />
         </div>
 
         {/* The New, Clean Header */}
