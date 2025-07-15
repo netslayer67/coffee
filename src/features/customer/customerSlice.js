@@ -9,7 +9,7 @@ const initialState = {
     session: sessionData ? sessionData : {
         customerName: null,
         tableId: null,
-        tableName: null, // Kita bisa tambahkan nama meja untuk kemudahan display
+        tableNumber: null, // <-- Tambahkan properti tableNumber
     },
     status: 'idle', // 'idle' | 'loading' | 'succeeded' | 'failed'
     error: null,
@@ -45,10 +45,18 @@ const customerSlice = createSlice({
     reducers: {
         // Aksi untuk membersihkan sesi pelanggan, misalnya setelah selesai bayar
         clearCustomerSession: (state) => {
-            state.session = { customerName: null, tableId: null, tableName: null };
+            state.session = { customerName: null, tableId: null, tableNumber: null };
             state.status = 'idle';
             state.error = null;
             sessionStorage.removeItem('customerSession');
+        },
+        updateSessionWithOrder: (state, action) => {
+            const order = action.payload;
+            if (order && order._id) {
+                state.session.orderId = order._id;
+                // Simpan juga ke sessionStorage agar persisten
+                sessionStorage.setItem('customerSession', JSON.stringify(state.session));
+            }
         },
         // Aksi untuk menyimpan nama meja yang dipilih, ini bisa dipanggil
         // bersamaan dengan tableId untuk pengalaman pengguna yang lebih baik
@@ -76,7 +84,7 @@ const customerSlice = createSlice({
 });
 
 // Ekspor aksi dan reducer
-export const { clearCustomerSession, setTableInfo } = customerSlice.actions;
+export const { clearCustomerSession, setTableInfo, updateSessionWithOrder } = customerSlice.actions;
 
 // Ekspor selectors untuk memudahkan akses state di komponen
 export const selectCustomerSession = (state) => state.customer.session;

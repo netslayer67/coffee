@@ -3,14 +3,19 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Coffee, Calculator, ShoppingCart, Home, Receipt as ReceiptIcon } from 'lucide-react';
 
+// 1. Impor hooks dan selector dari Redux
+import { useSelector } from 'react-redux';
+import { selectCart } from '../features/orders/orderSlice';
+import { selectCurrentOrder } from '../features/orders/orderSlice';
+
 const NavButton = ({ onClick, icon: Icon, label, isActive, hasBadge, badgeCount }) => (
     <motion.button
         onClick={onClick}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         className={`relative px-3 sm:px-4 py-2 rounded-xl flex items-center gap-2 transition-all duration-300 ${isActive
-                ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20'
-                : 'bg-white/5 text-gray-300 hover:bg-white/15'
+            ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20'
+            : 'bg-white/5 text-gray-300 hover:bg-white/15'
             }`}
     >
         <Icon className="w-4 h-4" />
@@ -23,16 +28,22 @@ const NavButton = ({ onClick, icon: Icon, label, isActive, hasBadge, badgeCount 
     </motion.button>
 );
 
-export default function AppHeader({ currentPage, navigateTo, cart, selectedOrder }) {
+export default function AppHeader({ currentPage, navigateTo }) { // Hapus props cart dan selectedOrder
+    // 2. Ambil state langsung dari Redux store
+    const cart = useSelector(selectCart);
+    const selectedOrder = useSelector(selectCurrentOrder);
+
     const isCustomerFlow = ['customerLanding', 'menu', 'order', 'payment', 'receipt'].includes(currentPage);
     const isCashierFlow = currentPage === 'cashier';
 
+    // Kalkulasi jumlah item di keranjang
     const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
     const customerNavLinks = [
         { page: 'menu', label: 'Menu', icon: Coffee },
-        { page: 'order', label: 'Cart', icon: ShoppingCart, hasBadge: cart.length > 0, badgeCount: cartItemCount },
-        ...(selectedOrder ? [{ page: 'receipt', label: 'Receipt', icon: ReceiptIcon }] : []),
+        { page: 'order', label: 'Keranjang', icon: ShoppingCart, hasBadge: cartItemCount > 0, badgeCount: cartItemCount },
+        // Tampilkan tombol struk hanya jika ada pesanan yang sedang aktif/dilihat
+        ...(selectedOrder ? [{ page: 'receipt', label: 'Struk', icon: ReceiptIcon }] : []),
     ];
 
     return (
@@ -58,11 +69,11 @@ export default function AppHeader({ currentPage, navigateTo, cart, selectedOrder
                                 <h1 className="text-xl font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
                                     Café Horizon
                                 </h1>
-                                <p className="text-xs text-gray-400 -mt-1">Premium Coffee Experience</p>
+                                <p className="text-xs text-gray-400 -mt-1">Pengalaman Kopi Premium</p>
                             </div>
                         </motion.div>
 
-                        {/* Navigation Buttons */}
+                        {/* Tombol Navigasi */}
                         <div className="flex items-center gap-2">
                             {isCustomerFlow && customerNavLinks.map(link => (
                                 <NavButton
@@ -79,7 +90,7 @@ export default function AppHeader({ currentPage, navigateTo, cart, selectedOrder
                             <NavButton
                                 onClick={() => navigateTo(isCashierFlow ? 'customerLanding' : 'cashier')}
                                 icon={isCashierFlow ? Home : Calculator}
-                                label={isCashierFlow ? 'Home' : 'Cashier'}
+                                label={isCashierFlow ? 'Beranda' : 'Kasir'}
                                 isActive={isCashierFlow}
                             />
                         </div>

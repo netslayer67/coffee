@@ -3,6 +3,7 @@ import axios from '../../api/axios'; // Pastikan path ini benar
 
 // Initial state untuk slice pesanan
 const initialState = {
+    orderId: null,
     orders: [], // Untuk menyimpan daftar pesanan dari kasir
     currentOrder: null, // Untuk menyimpan detail pesanan yang sedang dilihat
     cart: [], // Keranjang belanja pelanggan
@@ -10,21 +11,55 @@ const initialState = {
     error: null,
 };
 
-/**
- * Async Thunk untuk MEMBUAT PESANAN BARU
- * Memanggil endpoint: POST /orders
- */
+// Async Thunk untuk membuat pesanan baru (tetap ada, tapi akan dipanggil secara internal)
 export const createOrder = createAsyncThunk(
     'orders/create',
     async (orderData, { rejectWithValue }) => {
         try {
-            // orderData berisi: { customerName, table, items, subtotal, total }
             const response = await axios.post('/orders', orderData);
             return response.data;
         } catch (err) {
-            if (!err.response) throw err;
-            return rejectWithValue(err.response.data);
+            return rejectWithValue(err.response?.data?.message || 'Gagal membuat pesanan.');
         }
+    }
+);
+
+export const handleAddToCart = createAsyncThunk(
+    'orders/handleAddToCart',
+    async (item, { getState, dispatch, rejectWithValue }) => {
+        const { orders, customer } = getState();
+        let currentOrder = orders.currentOrder;
+
+        // Langkah 1: Jika belum ada pesanan aktif, buat "draft" pesanan baru.
+        if (!currentOrder) {
+            const { customerName, tableId } = customer.session;
+            if (!customerName || !tableId) {
+                return rejectWithValue('Sesi pelanggan tidak valid. Silakan mulai dari awal.');
+            }
+
+            const orderData = {
+                customerName,
+                table: tableId,
+                items: [{ product: item._id, quantity: 1, price: item.price }],
+                subtotal: item.price,
+                total: item.price,
+            };
+
+            try {
+                const actionResult = await dispatch(createOrder(orderData));
+                if (createOrder.rejected.match(actionResult)) {
+                    return rejectWithValue(actionResult.payload);
+                }
+                // `currentOrder` akan diisi oleh extraReducer dari createOrder
+            } catch (err) {
+                return rejectWithValue(err.message);
+            }
+        }
+
+        // Langkah 2: Setelah memastikan pesanan ada, tambahkan item ke state cart
+        dispatch(orderSlice.actions.addToCart(item));
+        // Mengembalikan data item agar bisa diakses jika perlu
+        return item;
     }
 );
 
@@ -97,7 +132,6 @@ export const fetchCustomerOrderStatus = createAsyncThunk(
 const orderSlice = createSlice({
     name: 'orders',
     initialState,
-    // Reducers sinkron biasa untuk mengelola keranjang belanja (cart)
     reducers: {
         addToCart: (state, action) => {
             const item = action.payload;
@@ -122,41 +156,52 @@ const orderSlice = createSlice({
         clearCart: (state) => {
             state.cart = [];
         },
+        clearCurrentOrder: (state) => {
+            state.currentOrder = null;
+        },
+        // Reducers untuk fungsionalitas real-time
+        addOrderRealtime: (state, action) => {
+            state.orders.unshift(action.payload);
+        },
+        updateOrderRealtime: (state, action) => {
+            const updatedOrder = action.payload;
+            const index = state.orders.findIndex(order => order._id === updatedOrder._id);
+            if (index !== -1) {
+                state.orders[index] = updatedOrder;
+            }
+        },
     },
     extraReducers: (builder) => {
         builder
-            // Kasus untuk createOrder
+            // Kasus untuk createOrder (dipanggil oleh handleAddToCart)
             .addCase(createOrder.pending, (state) => {
                 state.status = 'loading';
             })
             .addCase(createOrder.fulfilled, (state, action) => {
                 state.status = 'succeeded';
                 state.currentOrder = action.payload; // Simpan pesanan yang baru dibuat
-                state.cart = []; // Kosongkan keranjang setelah berhasil
+                // JANGAN KOSONGKAN KERANJANG DI SINI, karena item pertama baru masuk
             })
             .addCase(createOrder.rejected, (state, action) => {
                 state.status = 'failed';
-                state.error = action.payload.message;
+                state.error = action.payload;
             })
-            // Kasus untuk fetchOrders (get all orders for cashier)
-            .addCase(fetchOrders.pending, (state) => {
+            // Kasus untuk handleAddToCart (Thunk utama)
+            .addCase(handleAddToCart.pending, (state) => {
                 state.status = 'loading';
             })
-            .addCase(fetchOrders.fulfilled, (state, action) => {
+            .addCase(handleAddToCart.fulfilled, (state) => {
                 state.status = 'succeeded';
-                state.orders = action.payload;
             })
-            .addCase(fetchOrders.rejected, (state, action) => {
+            .addCase(handleAddToCart.rejected, (state, action) => {
                 state.status = 'failed';
-                state.error = action.payload.message;
+                state.error = action.payload;
             })
             // Kasus untuk updateOrderStatus
             .addCase(updateOrderStatus.fulfilled, (state, action) => {
-                const updatedOrder = action.payload;
-                const index = state.orders.findIndex(order => order._id === updatedOrder._id);
-                if (index !== -1) {
-                    state.orders[index] = updatedOrder;
-                }
+                // Pembaruan state sekarang ditangani oleh `updateOrderRealtime` via socket,
+                // jadi kita tidak perlu melakukan apa-apa di sini, cukup ubah status.
+                state.status = 'succeeded';
             })
             // Kasus untuk fetchCustomerOrderStatus
             .addCase(fetchCustomerOrderStatus.pending, (state) => {
@@ -173,10 +218,17 @@ const orderSlice = createSlice({
     },
 });
 
-// Ekspor aksi dan reducer
-export const { addToCart, updateCartQuantity, clearCart } = orderSlice.actions;
+// Ekspor semua aksi dan reducer yang relevan
+export const {
+    addToCart,
+    updateCartQuantity,
+    clearCart,
+    clearCurrentOrder,
+    addOrderRealtime,
+    updateOrderRealtime
+} = orderSlice.actions;
 
-// Ekspor selectors
+// Ekspor semua selectors yang relevan
 export const selectAllOrders = (state) => state.orders.orders;
 export const selectCart = (state) => state.orders.cart;
 export const selectCurrentOrder = (state) => state.orders.currentOrder;

@@ -1,7 +1,10 @@
-// src/components/cashier/CashierStats.jsx
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { ShoppingBag, DollarSign, Clock, CheckCircle } from 'lucide-react';
+
+// 1. Impor hooks dan selector dari Redux
+import { useSelector } from 'react-redux';
+import { selectAllOrders } from '../../features/orders/orderSlice';
 
 const formatPrice = (price) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(price);
 
@@ -24,19 +27,25 @@ const StatCard = ({ title, value, icon: Icon, colorClass, delay }) => (
   </motion.div>
 );
 
-export default function CashierStats({ orders }) {
-  const totalRevenue = orders
-    .filter(order => order.status === 'completed')
-    .reduce((sum, order) => sum + order.total, 0);
+export default function CashierStats() {
+  // 2. Ambil data pesanan langsung dari Redux store
+  const orders = useSelector(selectAllOrders);
 
-  const pendingOrders = orders.filter(order => ['pending', 'preparing'].includes(order.status)).length;
-  const completedOrders = orders.filter(order => order.status === 'completed').length;
+  // 3. Gunakan useMemo untuk kalkulasi agar lebih efisien
+  const { totalRevenue, inProgressOrders, completedOrders } = useMemo(() => {
+    const revenue = orders
+      .filter(order => order.status === 'completed')
+      .reduce((sum, order) => sum + order.total, 0);
+    const inProgress = orders.filter(order => ['pending', 'preparing', 'ready'].includes(order.status)).length;
+    const completed = orders.filter(order => order.status === 'completed').length;
+    return { totalRevenue: revenue, inProgressOrders: inProgress, completedOrders: completed };
+  }, [orders]);
 
   const statItems = [
-    { title: 'Total Orders', value: orders.length, icon: ShoppingBag, colorClass: 'bg-amber-500/80' },
-    { title: 'Revenue', value: formatPrice(totalRevenue), icon: DollarSign, colorClass: 'bg-green-500/80' },
-    { title: 'In Progress', value: pendingOrders, icon: Clock, colorClass: 'bg-blue-500/80' },
-    { title: 'Completed', value: completedOrders, icon: CheckCircle, colorClass: 'bg-purple-500/80' }
+    { title: 'Total Pendapatan', value: formatPrice(totalRevenue), icon: DollarSign, colorClass: 'bg-green-500/80' },
+    { title: 'Pesanan Aktif', value: inProgressOrders, icon: Clock, colorClass: 'bg-blue-500/80' },
+    { title: 'Total Pesanan Hari Ini', value: orders.length, icon: ShoppingBag, colorClass: 'bg-amber-500/80' },
+    { title: 'Pesanan Selesai', value: completedOrders, icon: CheckCircle, colorClass: 'bg-purple-500/80' },
   ];
 
   return (

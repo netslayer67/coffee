@@ -1,12 +1,23 @@
-// OrderPage.jsx — Final High-End Premium Design
-import React, { useState } from 'react';
+// src/pages/OrderPage.jsx
+import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Minus, Plus, Trash2, ShoppingCart,
-  User, CreditCard, Edit3, ChevronRight
+  User, Edit3, ChevronRight, Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
+
+// 1. Impor hooks dan actions dari Redux (nama sudah disesuaikan)
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  selectCart,
+  updateCartQuantity,
+  clearCart,
+  selectCurrentOrder, // Ambil order yang sudah ada
+  selectOrderStatus
+} from '../features/orders/orderSlice';
+import { selectCustomerSession } from '../features/customer/customerSlice';
 
 const formatPrice = (price) => new Intl.NumberFormat('id-ID', {
   style: 'currency',
@@ -14,49 +25,95 @@ const formatPrice = (price) => new Intl.NumberFormat('id-ID', {
   minimumFractionDigits: 0
 }).format(price);
 
-export default function OrderPage({ cart, updateCartItem, clearCart, addOrder, customerInfo, navigateTo }) {
-  const [isProcessing, setIsProcessing] = useState(false);
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = subtotal * 0.11;
-  const grandTotal = subtotal + tax;
+export default function OrderPage({ navigateTo }) {
+  const dispatch = useDispatch();
 
+  // 2. Ambil semua state yang relevan dari Redux Store
+  const cart = useSelector(selectCart);
+  const customerSession = useSelector(selectCustomerSession);
+  const currentOrder = useSelector(selectCurrentOrder); // Gunakan order yang sudah dibuat
+  const orderStatus = useSelector(selectOrderStatus);
+
+  // 3. Kalkulasi total menggunakan useMemo (tidak ada perubahan)
+  const { subtotal, tax, grandTotal } = useMemo(() => {
+    const sub = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const taxVal = sub * 0.11;
+    return {
+      subtotal: sub,
+      tax: taxVal,
+      grandTotal: sub + taxVal,
+    };
+  }, [cart]);
+
+  // 4. Logika untuk membuat pesanan (tidak ada perubahan, sudah benar)
   const handleSubmitOrder = () => {
     if (cart.length === 0) {
       toast({ title: "Keranjang Anda kosong", description: "Silakan tambahkan item terlebih dahulu.", variant: "destructive" });
       return;
     }
-    if (!customerInfo.name || !customerInfo.tableNumber) {
-      toast({ title: "Informasi Pelanggan Kurang", description: "Mohon lengkapi nama dan nomor meja Anda.", variant: "destructive" });
+    if (!customerSession.customerName || !customerSession.tableId) {
+      toast({ title: "Informasi Pelanggan Kurang", description: "Sesi pelanggan tidak valid. Silakan kembali ke halaman utama.", variant: "destructive" });
+      navigateTo('customerLanding');
       return;
     }
 
-    setIsProcessing(true);
-    setTimeout(() => {
-      const order = {
-        id: `ord_${Date.now()}`,
-        items: [...cart],
-        customer: { ...customerInfo },
-        total: grandTotal,
-        status: 'pending',
-        timestamp: new Date().toISOString(),
-        orderNumber: `ORD-${Date.now().toString().slice(-6)}`
-      };
-      addOrder(order);
-      clearCart();
-      setIsProcessing(false);
-      toast({
-        title: "Pesanan Berhasil Dibuat! 🎉",
-        description: `Pesanan ${order.orderNumber} sedang disiapkan.`
+    const orderData = {
+      customerName: customerSession.customerName,
+      table: customerSession.tableId,
+      items: cart.map(item => ({
+        product: item._id,
+        quantity: item.quantity,
+        price: item.price,
+      })),
+      subtotal: subtotal,
+      total: subtotal, // Total awal sebelum pajak
+    };
+
+    dispatch(createOrder(orderData))
+      .unwrap()
+      .then((createdOrder) => {
+        toast({
+          title: "Pesanan Berhasil Dibuat! 🎉",
+          description: `Pesanan ${createdOrder.orderNumber} sedang disiapkan.`
+        });
+        navigateTo('payment');
+      })
+      .catch((err) => {
+        toast({
+          title: "Gagal Membuat Pesanan",
+          description: err.message || "Terjadi kesalahan pada server.",
+          variant: "destructive",
+        });
       });
-      navigateTo('payment');
-    }, 2000);
   };
 
-  // --- Variants ---
-  const listVariants = {
-    visible: { transition: { staggerChildren: 0.08 } },
-    hidden: {}
+  const handleNavigateToPayment = () => {
+    // Validasi dasar, pastikan ada item di keranjang dan sesi valid
+    if (cart.length === 0) {
+      toast({ title: "Keranjang Anda kosong", variant: "destructive" });
+      return;
+    }
+    if (!currentOrder) {
+      toast({ title: "Pesanan tidak ditemukan", description: "Silakan kembali ke menu dan tambahkan item.", variant: "destructive" });
+      return;
+    }
+
+    // Langsung arahkan ke halaman pembayaran karena pesanan sudah dibuat
+    navigateTo('payment');
   };
+
+  const handleUpdateQuantity = (itemId, quantity) => {
+    dispatch(updateCartQuantity({ itemId, quantity }));
+  };
+
+  const handleClearCart = () => {
+    // Di sini kita juga bisa menambahkan logika untuk membatalkan pesanan
+    // jika keranjang dikosongkan, tapi untuk sekarang kita biarkan sederhana.
+    dispatch(clearCart());
+  };
+
+  // --- Sisa dari kode komponen (UI dan animasi) tidak ada perubahan ---
+  const listVariants = { visible: { transition: { staggerChildren: 0.08 } }, hidden: {} };
   const itemVariants = {
     visible: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 150, damping: 20 } },
     hidden: { opacity: 0, x: -20 },
@@ -76,8 +133,10 @@ export default function OrderPage({ cart, updateCartItem, clearCart, addOrder, c
             Info Pelanggan
           </h3>
           <div className="text-sm space-y-1.5 text-neutral-300 mt-3">
-            <div className="flex items-center gap-3"><span>Nama:</span><span className="text-white font-medium">{customerInfo.name || '-'}</span></div>
-            <div className="flex items-center gap-3"><span>Meja:</span><span className="text-white font-medium">{customerInfo.tableNumber || '-'}</span></div>
+            <div className="flex items-center gap-3"><span>Nama:</span><span className="text-white font-medium">{customerSession.customerName || '-'}</span></div>
+            <div className="flex items-center gap-3"><span>Meja:</span><span className="text-white font-medium">{customerSession.tableNumber || '-'}</span></div>
+            {/* Tampilkan Order ID jika ada */}
+            {currentOrder && <div className="flex items-center gap-3"><span>No. Pesanan:</span><span className="text-white font-medium">{currentOrder.orderNumber}</span></div>}
           </div>
         </div>
         <Button onClick={() => navigateTo('customerLanding')} size="icon" variant="outline"
@@ -109,13 +168,13 @@ export default function OrderPage({ cart, updateCartItem, clearCart, addOrder, c
           <span>Total</span>
           <span className="text-emerald-400">{formatPrice(grandTotal)}</span>
         </div>
-        <Button onClick={handleSubmitOrder} disabled={isProcessing || cart.length === 0}
+        <Button onClick={handleNavigateToPayment} disabled={orderStatus === 'loading' || cart.length === 0}
           className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-black font-bold py-3.5 rounded-xl text-base transition hover:scale-[1.03] disabled:opacity-50"
           asChild
         >
           <motion.button whileTap={{ scale: 0.98 }}>
-            {isProcessing
-              ? <div className="flex items-center"><div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin mr-3" /> Memproses...</div>
+            {orderStatus === 'loading'
+              ? <div className="flex items-center"><Loader2 className="w-5 h-5 mr-3 animate-spin" /> Memproses...</div>
               : <div className="flex items-center">Lanjutkan Pembayaran <ChevronRight className="w-5 h-5 ml-2" /></div>
             }
           </motion.button>
@@ -125,8 +184,7 @@ export default function OrderPage({ cart, updateCartItem, clearCart, addOrder, c
   );
 
   return (
-    <div className="relative min-h-screen w-full bg-black text-white overflow-x-hidden font-sans">
-      {/* Grid + Glow Background */}
+    <div className="relative min-h-screen w-full  text-white overflow-x-hidden font-sans">
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-[linear-gradient(135deg,#ffffff0a_1px,transparent_1px),linear-gradient(225deg,#ffffff0a_1px,transparent_1px)] bg-[size:30px_30px]" />
         <div className="absolute top-1/2 left-1/2 -z-10 h-[450px] w-[450px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/10 blur-[120px] animate-pulse" />
@@ -141,7 +199,6 @@ export default function OrderPage({ cart, updateCartItem, clearCart, addOrder, c
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 lg:gap-8">
-          {/* Left Side */}
           <div className="lg:col-span-2 space-y-6">
             <CustomerInfoCard />
             <motion.div
@@ -155,7 +212,7 @@ export default function OrderPage({ cart, updateCartItem, clearCart, addOrder, c
                   Item Pesanan ({cart.reduce((acc, item) => acc + item.quantity, 0)})
                 </h2>
                 {cart.length > 0 && (
-                  <Button onClick={clearCart} size="sm" variant="ghost"
+                  <Button onClick={handleClearCart} size="sm" variant="ghost"
                     className="text-red-400/80 hover:bg-red-500/10 hover:text-red-400"
                     asChild>
                     <motion.button whileTap={{ scale: 0.95 }}><Trash2 className="w-4 h-4 mr-1.5" /> Hapus Semua</motion.button>
@@ -168,22 +225,22 @@ export default function OrderPage({ cart, updateCartItem, clearCart, addOrder, c
                   {cart.length > 0 ? (
                     <motion.div variants={listVariants} initial="hidden" animate="visible" exit="hidden" className="space-y-2">
                       {cart.map(item => (
-                        <motion.div key={item.id} variants={itemVariants} layout
+                        <motion.div key={item._id} variants={itemVariants} layout
                           className="flex items-center gap-4 p-2 rounded-lg hover:bg-white/5 transition"
                         >
-                          <img src={item.image} alt={item.name} className="w-16 h-16 rounded-lg object-cover border border-white/10" />
+                          <img src={item.imageUrl} alt={item.name} className="w-16 h-16 rounded-lg object-cover border border-white/10" />
                           <div className="flex-1">
                             <h4 className="font-medium text-white text-sm">{item.name}</h4>
                             <p className="text-xs text-green-400/90 font-light">{formatPrice(item.price)}</p>
                           </div>
                           <div className="flex items-center gap-1 bg-black/30 px-1 py-0.5 rounded-full border border-white/10">
-                            <Button onClick={() => updateCartItem(item.id, item.quantity - 1)} size="icon" variant="ghost" asChild>
+                            <Button onClick={() => handleUpdateQuantity(item._id, item.quantity - 1)} size="icon" variant="ghost" asChild>
                               <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }}>
                                 <Minus className="w-4 h-4" />
                               </motion.button>
                             </Button>
                             <span className="text-white font-bold text-sm w-6 text-center">{item.quantity}</span>
-                            <Button onClick={() => updateCartItem(item.id, item.quantity + 1)} size="icon" variant="ghost" asChild>
+                            <Button onClick={() => handleUpdateQuantity(item._id, item.quantity + 1)} size="icon" variant="ghost" asChild>
                               <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.1 }}>
                                 <Plus className="w-4 h-4" />
                               </motion.button>
@@ -203,15 +260,11 @@ export default function OrderPage({ cart, updateCartItem, clearCart, addOrder, c
               </div>
             </motion.div>
           </div>
-
-          {/* Right Summary */}
-          <div className="hidden lg:flex flex-col gap-6 sticky top-8">
+          <div className="hidden lg:flex flex-col gap-6 sticky top-28">
             <PaymentSummary />
           </div>
         </div>
       </motion.div>
-
-      {/* Sticky Mobile Footer */}
       <PaymentSummary isSticky />
     </div>
   );
