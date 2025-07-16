@@ -12,7 +12,7 @@ import {
   selectOrderStatus,
   fetchCustomerOrderStatus
 } from '../features/orders/orderSlice';
-import { clearCustomerSession } from '../features/customer/customerSlice'; // Untuk membersihkan sesi setelah selesai
+import { selectCustomerSession, clearCustomerSession } from '../features/customer/customerSlice'; // Untuk membersihkan sesi setelah selesai
 
 export default function ReceiptPage({ navigateTo }) { // Hapus prop 'order'
   const dispatch = useDispatch();
@@ -20,6 +20,7 @@ export default function ReceiptPage({ navigateTo }) { // Hapus prop 'order'
   // 2. Ambil state yang relevan dari Redux store
   const order = useSelector(selectCurrentOrder);
   const status = useSelector(selectOrderStatus);
+  const customerSession = useSelector(selectCustomerSession); //
 
   // 3. Ambil data pesanan terbaru dari backend saat halaman dimuat
   useEffect(() => {
@@ -28,6 +29,29 @@ export default function ReceiptPage({ navigateTo }) { // Hapus prop 'order'
       dispatch(fetchCustomerOrderStatus(order._id));
     }
   }, [dispatch, order?._id]); // Jalankan efek ini jika order._id berubah
+  const getDisplayPaymentStatus = () => {
+    const paymentMethodMap = {
+      'bca_va': 'BCA Virtual Account',
+      'qris': 'QRIS'
+    };
+
+    // Jika metode pembayaran online dipilih, langsung tampilkan berhasil
+    if (customerSession?.paymentMethod && (customerSession.paymentMethod === 'bca_va' || customerSession.paymentMethod === 'qris')) {
+      const methodName = paymentMethodMap[customerSession.paymentMethod] || 'Online';
+      return {
+        text: `Pembayaran Berhasil Menggunakan ${methodName}`,
+        className: 'text-green-400'
+      };
+    }
+
+    // Fallback ke status dari database
+    return {
+      text: order?.paymentStatus || 'Pending',
+      className: order?.paymentStatus === 'paid' ? 'text-green-400' : 'text-yellow-400'
+    };
+  };
+
+  const paymentInfo = getDisplayPaymentStatus();
 
   const handleBackToHome = () => {
     dispatch(clearCustomerSession()); // Bersihkan sesi pelanggan saat kembali ke home
@@ -80,7 +104,7 @@ export default function ReceiptPage({ navigateTo }) { // Hapus prop 'order'
             <div className="flex justify-between text-gray-300"><span>Pelanggan:</span> <span className="font-medium text-white">{order.customerName}</span></div>
             <div className="flex justify-between text-gray-300"><span>Meja:</span> <span className="font-medium text-white">{order.table?.tableNumber || '-'}</span></div>
             <div className="flex justify-between text-gray-300"><span>Status:</span> <span className="font-bold text-amber-400 capitalize">{order.status}</span></div>
-            <div className="flex justify-between text-gray-300"><span>Pembayaran:</span> <span className="font-bold text-green-400 capitalize">{order.paymentStatus}</span></div>
+            <div className="flex justify-between text-gray-300"><span>Pembayaran:</span> <span className={`font-bold text-green-400 capitalize ${paymentInfo.className}`}>{paymentInfo.text}</span></div>
           </div>
 
           <div className="my-6">

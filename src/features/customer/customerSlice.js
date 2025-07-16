@@ -1,17 +1,17 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from '../../api/axios'; // Pastikan path ini benar
+import axios from '../../api/axios';
 
-// Coba ambil data sesi customer dari localStorage atau sessionStorage
 const sessionData = JSON.parse(sessionStorage.getItem('customerSession'));
 
-// Initial state untuk slice customer
 const initialState = {
     session: sessionData ? sessionData : {
         customerName: null,
         tableId: null,
-        tableNumber: null, // <-- Tambahkan properti tableNumber
+        tableNumber: null,
+        orderId: null,
+        paymentMethod: null, // <-- Tambahkan properti ini
     },
-    status: 'idle', // 'idle' | 'loading' | 'succeeded' | 'failed'
+    status: 'idle',
     error: null,
 };
 
@@ -22,17 +22,12 @@ const initialState = {
 export const startCustomerSession = createAsyncThunk(
     'customer/startSession',
     async (sessionInfo, { rejectWithValue }) => {
-        // sessionInfo akan berisi: { customerName: 'Budi', tableId: 'xxxx' }
         try {
             const response = await axios.post('/customer/start-session', sessionInfo);
-            // Simpan sesi ke sessionStorage agar tidak hilang saat refresh,
-            // tapi hilang saat browser ditutup.
             sessionStorage.setItem('customerSession', JSON.stringify(response.data.sessionData));
             return response.data;
         } catch (err) {
-            if (!err.response) {
-                throw err;
-            }
+            if (!err.response) throw err;
             return rejectWithValue(err.response.data);
         }
     }
@@ -45,7 +40,7 @@ const customerSlice = createSlice({
     reducers: {
         // Aksi untuk membersihkan sesi pelanggan, misalnya setelah selesai bayar
         clearCustomerSession: (state) => {
-            state.session = { customerName: null, tableId: null, tableNumber: null };
+            state.session = { customerName: null, tableId: null, tableNumber: null, orderId: null, paymentMethod: null };
             state.status = 'idle';
             state.error = null;
             sessionStorage.removeItem('customerSession');
@@ -57,6 +52,11 @@ const customerSlice = createSlice({
                 // Simpan juga ke sessionStorage agar persisten
                 sessionStorage.setItem('customerSession', JSON.stringify(state.session));
             }
+        },
+        // --- TAMBAHKAN REDUCER INI ---
+        setPaymentMethod: (state, action) => {
+            state.session.paymentMethod = action.payload;
+            sessionStorage.setItem('customerSession', JSON.stringify(state.session));
         },
         // Aksi untuk menyimpan nama meja yang dipilih, ini bisa dipanggil
         // bersamaan dengan tableId untuk pengalaman pengguna yang lebih baik
@@ -84,7 +84,7 @@ const customerSlice = createSlice({
 });
 
 // Ekspor aksi dan reducer
-export const { clearCustomerSession, setTableInfo, updateSessionWithOrder } = customerSlice.actions;
+export const { clearCustomerSession, setTableInfo, updateSessionWithOrder, setPaymentMethod } = customerSlice.actions;
 
 // Ekspor selectors untuk memudahkan akses state di komponen
 export const selectCustomerSession = (state) => state.customer.session;

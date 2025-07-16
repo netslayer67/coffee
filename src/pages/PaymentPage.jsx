@@ -15,6 +15,8 @@ import {
   clearPaymentState,
 } from '../features/payments/paymentSlice';
 import { selectCurrentOrder } from '../features/orders/orderSlice';
+import { setPaymentMethod } from '../features/customer/customerSlice';
+
 
 
 export default function PaymentPage({ navigateTo }) {
@@ -22,6 +24,8 @@ export default function PaymentPage({ navigateTo }) {
   const order = useSelector(selectCurrentOrder);
   const paymentStatus = useSelector(selectPaymentStatus);
   const transactionToken = useSelector(selectTransactionToken);
+
+
 
   const [selectedMethod, setSelectedMethod] = useState(null);
 
@@ -77,7 +81,10 @@ export default function PaymentPage({ navigateTo }) {
       return;
     }
 
-    if (selectedMethod === 'qris' || selectedMethod === 'bca_va') { // <-- Sesuaikan ID
+    if (selectedMethod === 'qris' || selectedMethod === 'bca_va') {
+      // --- PERBAIKAN DI SINI ---
+      // Simpan metode pembayaran ke sesi SEBELUM membuat transaksi
+      dispatch(setPaymentMethod(selectedMethod));
       dispatch(createPaymentTransaction(order._id));
     } else if (selectedMethod === 'cashier') {
       dispatch(processCashPayment(order));

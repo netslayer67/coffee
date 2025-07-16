@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from '../../api/axios';
 
+
 const initialState = {
     transactionToken: null, // Untuk menyimpan token Snap.js dari Midtrans
     transactionRedirectUrl: null, // URL redirect jika menggunakan QRIS
