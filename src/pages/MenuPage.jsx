@@ -13,7 +13,7 @@ import { updateSessionWithOrder } from '../features/customer/customerSlice';
 
 const formatPrice = (price) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(price);
 
-export default function MenuPage() { // Hapus prop 'addToCart'
+export default function MenuPage() {
   const dispatch = useDispatch();
 
   // 2. Ambil state dari Redux store
