@@ -183,6 +183,19 @@ export default function OrderPage({ navigateTo }) {
     </motion.div>
   );
 
+  // Jika tidak ada sesi pelanggan, tampilkan pesan keranjang kosong
+  if (!customerSession || !customerSession.customerName) {
+    return (
+      <div className="relative min-h-screen w-full bg-black text-white overflow-x-hidden font-sans flex items-center justify-center">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center py-12 px-4">
+          <ShoppingCart className="w-12 h-12 mx-auto text-neutral-600 mb-4" />
+          <h3 className="font-medium text-neutral-400">Keranjang Anda kosong</h3>
+          <p className="text-sm text-neutral-500 font-light">Mulai tambahkan menu favorit Anda.</p>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-screen w-full  text-white overflow-x-hidden font-sans">
       <div className="absolute inset-0 z-0 pointer-events-none">
