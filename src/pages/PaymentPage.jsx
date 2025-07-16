@@ -1,11 +1,11 @@
 // src/pages/PaymentPage.jsx
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Banknote, CreditCard, CheckCircle, QrCode, Loader2, PartyPopper } from 'lucide-react';
+// 1. Impor ikon baru untuk Bank Transfer
+import { Banknote, Landmark, CheckCircle, QrCode, Loader2, PartyPopper } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 
-// 1. Impor hooks dan actions dari Redux
 import { useDispatch, useSelector } from 'react-redux';
 import {
   createPaymentTransaction,
@@ -14,82 +14,72 @@ import {
   selectPaymentStatus,
   clearPaymentState,
 } from '../features/payments/paymentSlice';
-import { selectCurrentOrder, clearCurrentOrder } from '../features/orders/orderSlice';
+import { selectCurrentOrder } from '../features/orders/orderSlice';
 
-export default function PaymentPage({ navigateTo }) { // Hapus props yang tidak perlu
+
+export default function PaymentPage({ navigateTo }) {
   const dispatch = useDispatch();
-
-  // 2. Ambil state yang relevan dari Redux store
   const order = useSelector(selectCurrentOrder);
   const paymentStatus = useSelector(selectPaymentStatus);
   const transactionToken = useSelector(selectTransactionToken);
 
-  // State lokal untuk komponen
   const [selectedMethod, setSelectedMethod] = useState(null);
 
-  // 3. Efek untuk memuat script Snap.js dari Midtrans dan menangani pembayaran
+  // useEffect untuk memuat script Snap.js dan menangani pembayaran
   useEffect(() => {
+    // Muat script Snap.js dari Midtrans
+    const scriptId = 'midtrans-snap-script';
+    const snapScriptUrl = 'https://app.sandbox.midtrans.com/snap/snap.js';
+    const clientKey = import.meta.env.VITE_MIDTRANS_CLIENT_KEY;
+
+    let script = document.getElementById(scriptId);
+    if (!script) {
+      script = document.createElement('script');
+      script.id = scriptId;
+      script.src = snapScriptUrl;
+      script.setAttribute('data-client-key', clientKey);
+      document.body.appendChild(script);
+    }
+
     if (transactionToken) {
-      // Muat script Snap.js jika belum ada
-      const scriptId = 'midtrans-snap-script';
-      let script = document.getElementById(scriptId);
+      // Panggil snap.pay setelah mendapatkan token
+      window.snap.pay(transactionToken, {
+        onSuccess: function (result) {
+          toast({ title: "Pembayaran Berhasil! 🎉", description: "Terima kasih! Pesanan Anda telah dibayar." });
+          navigateTo('receipt');
+        },
+        onPending: function (result) {
+          toast({ title: "Menunggu Pembayaran", description: "Selesaikan pembayaran Anda." });
+          navigateTo('receipt');
+        },
+        onError: function (result) {
+          toast({ title: "Pembayaran Gagal", description: "Terjadi kesalahan. Silakan coba lagi.", variant: "destructive" });
+          dispatch(clearPaymentState());
+        },
+        onClose: function () {
+          dispatch(clearPaymentState());
+        }
+      });
+    }
 
-      if (!script) {
-        script = document.createElement('script');
-        script.id = scriptId;
-        script.src = 'https://app.sandbox.midtrans.com/snap/snap.js'; // Gunakan URL sandbox
-        script.setAttribute('data-client-key', import.meta.env.VITE_MIDTRANS_CLIENT_KEY);
-        document.body.appendChild(script);
-      }
-
-      // Pastikan script sudah dimuat sebelum memanggil snap.pay
-      script.onload = () => {
-        window.snap.pay(transactionToken, {
-          onSuccess: function (result) {
-            console.log('success', result);
-            toast({ title: "Pembayaran Berhasil! 🎉", description: "Terima kasih! Pesanan Anda telah dibayar." });
-            navigateTo('receipt');
-          },
-          onPending: function (result) {
-            console.log('pending', result);
-            toast({ title: "Menunggu Pembayaran", description: "Selesaikan pembayaran Anda." });
-            navigateTo('receipt');
-          },
-          onError: function (result) {
-            console.log('error', result);
-            toast({ title: "Pembayaran Gagal", description: "Terjadi kesalahan. Silakan coba lagi.", variant: "destructive" });
-            dispatch(clearPaymentState()); // Bersihkan state jika error
-          },
-          onClose: function () {
-            console.log('customer closed the popup without finishing the payment');
-            dispatch(clearPaymentState()); // Bersihkan state jika popup ditutup
-          }
-        });
-      };
-
-      return () => {
-        // Bersihkan state saat komponen unmount
-        dispatch(clearPaymentState());
-      }
+    return () => {
+      dispatch(clearPaymentState());
     }
   }, [transactionToken, navigateTo, dispatch]);
 
-
   const handlePayment = () => {
     if (!selectedMethod) {
-      toast({ title: "Metode Belum Dipilih", description: "Silakan pilih metode pembayaran.", variant: "destructive" });
+      toast({ title: "Pilih Metode Pembayaran", variant: "destructive" });
       return;
     }
     if (!order) {
-      toast({ title: "Pesanan Tidak Ditemukan", description: "Tidak dapat melanjutkan pembayaran.", variant: "destructive" });
+      toast({ title: "Pesanan Tidak Ditemukan", variant: "destructive" });
       return;
     }
 
-    if (selectedMethod === 'qris' || selectedMethod === 'card') {
-      // 4. Dispatch aksi untuk membuat transaksi Midtrans
+    if (selectedMethod === 'qris' || selectedMethod === 'bca_va') { // <-- Sesuaikan ID
       dispatch(createPaymentTransaction(order._id));
     } else if (selectedMethod === 'cashier') {
-      // 5. Dispatch aksi untuk pembayaran tunai
       dispatch(processCashPayment(order));
       toast({
         title: "Lanjutkan ke Kasir",
@@ -99,7 +89,6 @@ export default function PaymentPage({ navigateTo }) { // Hapus props yang tidak 
       navigateTo('receipt');
     }
   };
-
 
   if (!order) {
     return (
@@ -112,16 +101,16 @@ export default function PaymentPage({ navigateTo }) { // Hapus props yang tidak 
     );
   }
 
+  // --- PERUBAHAN UTAMA DI SINI ---
   const paymentMethods = [
     { id: 'qris', name: 'QRIS Payment', icon: QrCode, description: 'Pindai kode QR dengan e-wallet Anda.' },
-    { id: 'card', name: 'Credit/Debit Card', icon: CreditCard, description: 'Bayar aman dengan kartu Anda.' },
+    { id: 'bca_va', name: 'BCA Virtual Account', icon: Landmark, description: 'Bayar melalui transfer bank BCA.' },
     { id: 'cashier', name: 'Bayar di Kasir', icon: Banknote, description: 'Bayar tunai atau dengan kartu di konter.' },
   ];
 
   const formatPrice = (price) => new Intl.NumberFormat('id-ID', {
     style: 'currency', currency: 'IDR', minimumFractionDigits: 0
-  }).format(price);
-
+  }).format(price?.toFixed(0) || 0);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-dots-pattern">
@@ -169,7 +158,7 @@ export default function PaymentPage({ navigateTo }) { // Hapus props yang tidak 
             >
               {paymentStatus === 'loading' ? (
                 <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Memproses...</>
-              ) : `Konfirmasi & Bayar ${formatPrice(order.total)}`}
+              ) : `Konfirmasi & Bayar ${formatPrice(order?.total)}`}
             </Button>
           </div>
         </div>
