@@ -1,15 +1,14 @@
-// src/pages/CashierPage.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ListFilter, DollarSign, ShoppingBag, Clock, Search, Eye,
-  UtensilsCrossed, CheckCircle, User, MapPin, Receipt, ArrowRight,
+  UtensilsCrossed, CheckCircle, User, MapPin, ArrowRight,
   XCircle, Archive, Loader2, LogOut
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 
-// 1. Impor hooks dan actions dari Redux
+// 1. Impor dari Redux dan Socket.IO
 import { useDispatch, useSelector } from 'react-redux';
 import { loginUser, selectCurrentUser, selectAuthStatus, selectAuthError, logout } from '../features/auth/authSlice';
 import {
@@ -17,14 +16,15 @@ import {
   updateOrderStatus,
   selectAllOrders,
   selectOrderStatus,
-  addOrderRealtime, // Action baru untuk socket
-  updateOrderRealtime // Action baru untuk socket
+  addOrderRealtime,
+  updateOrderRealtime
 } from '../features/orders/orderSlice';
-import { io } from "socket.io-client"; // Impor socket.io-client
+import { io } from "socket.io-client";
 
 //=================================================================
-// Komponen Internal (Tidak banyak berubah, hanya sumber datanya)
+// Komponen-komponen Internal yang Bersih dan Fokus
 //=================================================================
+
 const StatCard = ({ title, value, icon: Icon, colorClass, delay }) => (
   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay, duration: 0.5, ease: "easeOut" }}
     className="bg-gray-900/50 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl shadow-black/20">
@@ -54,9 +54,7 @@ const OrderCard = ({ order, onUpdateStatus, onViewReceipt }) => {
   const statusInfo = statusConfig[order.status] || {};
   const StatusIcon = statusInfo.icon || Clock;
 
-  const handleStatusUpdate = (newStatus) => {
-    onUpdateStatus(order._id, newStatus); // Gunakan _id dari MongoDB
-  };
+  const handleStatusUpdate = (newStatus) => onUpdateStatus(order._id, newStatus);
 
   const getStatusAction = () => {
     switch (order.status) {
@@ -89,7 +87,7 @@ const OrderCard = ({ order, onUpdateStatus, onViewReceipt }) => {
         </div>
         <div className="space-y-2 bg-white/5 rounded-xl p-3">
           <div className="flex items-center gap-3"><User className="w-5 h-5 text-gray-500 flex-shrink-0" /><span className="font-medium text-white truncate">{order.customerName}</span></div>
-          <div className="flex items-center gap-3"><MapPin className="w-5 h-5 text-gray-500 flex-shrink-0" /><span className="font-medium text-white">Meja {order.table.tableNumber}</span></div>
+          <div className="flex items-center gap-3"><MapPin className="w-5 h-5 text-gray-500 flex-shrink-0" /><span className="font-medium text-white">Meja {order.table?.tableNumber}</span></div>
         </div>
       </div>
       <div className="bg-black/20 p-3 flex items-center justify-end gap-2">
@@ -105,7 +103,6 @@ const OrderCard = ({ order, onUpdateStatus, onViewReceipt }) => {
     </motion.div>
   );
 };
-
 
 //=================================================================
 // Halaman Login
@@ -123,7 +120,7 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-900">
+    <div className="flex items-center justify-center min-h-screen">
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="p-8 bg-gray-900/50 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl w-full max-w-sm">
         <h2 className="text-3xl font-bold mb-6 text-center text-white">Cashier Login</h2>
         <form onSubmit={handleSubmit}>
@@ -153,62 +150,40 @@ const LoginPage = () => {
 //=================================================================
 // Komponen Dasbor Utama
 //=================================================================
-const CashierDashboard = ({ navigateTo }) => {
+const CashierDashboard = () => {
   const dispatch = useDispatch();
-
-  // 2. Ambil state dari Redux
   const orders = useSelector(selectAllOrders);
-  const orderLoadingStatus = useSelector(selectOrderStatus);
+  const orderInitialStatus = useSelector(selectOrderStatus);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [isMobileView, setIsMobileView] = useState(false);
-  const [activeTab, setActiveTab] = useState('pending');
 
-  // 3. Setup Socket.IO dan ambil data awal
+  // Setup Socket.IO dan ambil data awal
   useEffect(() => {
-    // Ambil data pesanan saat komponen dimuat
-    if (orderLoadingStatus === 'idle') {
+    if (orderInitialStatus === 'idle') {
       dispatch(fetchOrders());
     }
 
-    // Koneksi ke server Socket.IO
-    const socket = io(import.meta.env.VITE_API_BASE_URL.replace("/api/v1", "")); // URL base BE Anda
+    const socket = io(import.meta.env.VITE_API_BASE_URL.replace("/api/v1", ""));
 
-    socket.on('connect', () => {
-      console.log('Connected to socket server');
-    });
-
+    socket.on('connect', () => console.log('Connected to socket server'));
     socket.on('new_order', (newOrder) => {
-      console.log('New order received:', newOrder);
       toast({ title: "Pesanan Baru Masuk! 🔔", description: `Pesanan ${newOrder.orderNumber} dari ${newOrder.customerName}.` });
       dispatch(addOrderRealtime(newOrder));
     });
-
     socket.on('order_status_update', (updatedOrder) => {
-      console.log('Order status updated:', updatedOrder);
       dispatch(updateOrderRealtime(updatedOrder));
     });
 
-    // Cleanup koneksi saat komponen unmount
-    return () => {
-      socket.disconnect();
-    };
-  }, [dispatch, orderLoadingStatus]);
+    return () => socket.disconnect();
+  }, [dispatch, orderInitialStatus]);
 
-  useEffect(() => {
-    const checkMobile = () => setIsMobileView(window.innerWidth < 1024);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  // 4. Logika filtering dan kalkulasi menggunakan data dari Redux
+  // Logika filtering dan kalkulasi menggunakan data dari Redux
   const filteredOrders = useMemo(() => orders.filter(order => {
     const searchMatch = searchTerm === '' ||
       order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.table.tableNumber.toLowerCase().includes(searchTerm.toLowerCase());
+      order.table?.tableNumber.toLowerCase().includes(searchTerm.toLowerCase());
     const statusMatch = statusFilter === 'all' || order.status === statusFilter;
     return searchMatch && statusMatch;
   }), [orders, searchTerm, statusFilter]);
@@ -220,32 +195,10 @@ const CashierDashboard = ({ navigateTo }) => {
     completed: { title: 'Selesai', orders: filteredOrders.filter(o => o.status === 'completed') },
   }), [filteredOrders]);
 
-  const totalRevenue = useMemo(() => orders.filter(o => o.status === 'completed').reduce((sum, order) => sum + order.total, 0), [orders]);
-  const inProgressOrders = useMemo(() => orders.filter(o => ['pending', 'preparing', 'ready'].includes(o.status)).length, [orders]);
-
-  const statItems = [
-    { title: 'Total Pendapatan', value: formatPrice(totalRevenue), icon: DollarSign, colorClass: 'bg-green-500/80' },
-    { title: 'Pesanan Aktif', value: inProgressOrders, icon: Clock, colorClass: 'bg-blue-500/80' },
-    { title: 'Total Pesanan Hari Ini', value: orders.length, icon: ShoppingBag, colorClass: 'bg-amber-500/80' },
-    { title: 'Pesanan Selesai', value: orders.filter(o => o.status === 'completed').length, icon: CheckCircle, colorClass: 'bg-purple-500/80' },
-  ];
-
-  const filterOptions = [
-    { value: 'all', label: 'Semua', icon: ListFilter },
-    { value: 'pending', label: 'Menunggu', icon: Clock },
-    { value: 'preparing', label: 'Disiapkan', icon: UtensilsCrossed },
-    { value: 'ready', label: 'Siap', icon: CheckCircle },
-  ];
-
-  // 5. Handler yang di-dispatch ke Redux
   const handleUpdateStatus = (orderId, status) => {
     dispatch(updateOrderStatus({ orderId, status }));
   };
-
-  const handleViewReceipt = (order) => {
-    // Logika untuk menampilkan detail/struk pesanan
-    console.log("Viewing receipt for:", order);
-  };
+  const handleViewReceipt = (order) => console.log("Viewing receipt for:", order);
 
   return (
     <div className="max-w-[95rem] mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-0">
@@ -259,9 +212,11 @@ const CashierDashboard = ({ navigateTo }) => {
         </Button>
       </motion.div>
 
-      {/* --- Sisanya sama persis, hanya menggunakan data dan handler dari Redux --- */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {statItems.map((stat, index) => <StatCard key={stat.title} {...stat} delay={0.1 * (index + 1)} />)}
+        <StatCard title="Total Pendapatan" value={formatPrice(useMemo(() => orders.filter(o => o.status === 'completed').reduce((sum, order) => sum + order.total, 0), [orders]))} icon={DollarSign} colorClass="bg-green-500/80" delay={0.1} />
+        <StatCard title="Pesanan Aktif" value={useMemo(() => orders.filter(o => ['pending', 'preparing', 'ready'].includes(o.status)).length, [orders])} icon={Clock} colorClass="bg-blue-500/80" delay={0.2} />
+        <StatCard title="Total Pesanan Hari Ini" value={orders.length} icon={ShoppingBag} colorClass="bg-amber-500/80" delay={0.3} />
+        <StatCard title="Pesanan Selesai" value={useMemo(() => orders.filter(o => o.status === 'completed').length, [orders])} icon={CheckCircle} colorClass="bg-purple-500/80" delay={0.4} />
       </div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-gray-900/50 backdrop-blur-xl border border-white/10 rounded-2xl p-4 mb-8 flex flex-col md:flex-row gap-4">
@@ -270,43 +225,26 @@ const CashierDashboard = ({ navigateTo }) => {
           <input type="text" placeholder="Cari No Pesanan, Nama, atau Meja..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-amber-500/80" />
         </div>
-        <div className="flex items-center justify-center bg-black/20 p-1 rounded-lg">
-          {filterOptions.map(option => (
-            <button key={option.value} onClick={() => setStatusFilter(option.value)} className={`relative px-3 py-2 text-sm font-medium rounded-md flex items-center gap-2 transition-colors duration-300 ${statusFilter === option.value ? 'text-white' : 'text-gray-400 hover:text-white'}`}>
-              <option.icon className="w-4 h-4" />
-              <span className="hidden sm:inline">{option.label}</span>
-              {statusFilter === option.value && <motion.div layoutId="activeFilter" className="absolute inset-0 bg-amber-500/80 rounded-md -z-10" transition={{ type: 'spring', stiffness: 300, damping: 30 }} />}
-            </button>
-          ))}
-        </div>
       </motion.div>
 
-      {isMobileView ? (
-        // Mobile View (Tabs)
-        <div className="w-full">
-          {/* Tabs ... */}
-        </div>
-      ) : (
-        // Desktop View (Kanban Board)
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {Object.entries(orderColumns).map(([key, col]) => (
-            <div key={key} className="bg-black/20 rounded-2xl p-4">
-              <h2 className="text-lg font-bold text-white mb-4">{col.title} <span className="text-sm font-medium text-gray-400">({col.orders.length})</span></h2>
-              <div className="space-y-4 h-[calc(100vh-450px)] overflow-y-auto pr-2">
-                <AnimatePresence>
-                  {col.orders.length > 0 ? (
-                    col.orders.map(order => <OrderCard key={order._id} order={order} onUpdateStatus={handleUpdateStatus} onViewReceipt={handleViewReceipt} />)
-                  ) : (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-center h-full text-center text-gray-500 py-10">
-                      <Archive className="w-12 h-12 mx-auto mb-2" />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {Object.entries(orderColumns).map(([key, col]) => (
+          <div key={key} className="bg-black/20 rounded-2xl p-4">
+            <h2 className="text-lg font-bold text-white mb-4">{col.title} <span className="text-sm font-medium text-gray-400">({col.orders.length})</span></h2>
+            <div className="space-y-4 h-[calc(100vh-450px)] overflow-y-auto pr-2">
+              <AnimatePresence>
+                {col.orders.length > 0 ? (
+                  col.orders.map(order => <OrderCard key={order._id} order={order} onUpdateStatus={handleUpdateStatus} onViewReceipt={handleViewReceipt} />)
+                ) : (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-center h-full text-center text-gray-500 py-10">
+                    <Archive className="w-12 h-12 mx-auto mb-2" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -318,6 +256,5 @@ const CashierDashboard = ({ navigateTo }) => {
 export default function CashierPage() {
   const currentUser = useSelector(selectCurrentUser);
 
-  // Jika user sudah login, tampilkan dasbor. Jika tidak, tampilkan halaman login.
   return currentUser ? <CashierDashboard /> : <LoginPage />;
 }

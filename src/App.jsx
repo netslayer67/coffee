@@ -13,39 +13,65 @@ import PaymentPage from '@/pages/PaymentPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 
 function App() {
-  // 1. State lokal sekarang HANYA untuk mengelola halaman yang aktif.
+  // State lokal hanya untuk mengelola halaman yang aktif.
   const [currentPage, setCurrentPage] = useState('customerLanding');
 
-  // 2. Logika untuk menjaga sesi halaman saat refresh.
+  /**
+   * ##################################################
+   * ## LOGIKA UTAMA YANG DIPERBAIKI ADA DI FUNGSI INI ##
+   * ##################################################
+   */
   useEffect(() => {
-    // Ambil halaman terakhir dari sessionStorage saat komponen dimuat
-    const lastPage = sessionStorage.getItem('currentPage');
-    const customerSession = sessionStorage.getItem('customerSession');
+    // Fungsi untuk memeriksa path URL saat ini
+    const handleRouteChange = () => {
+      const path = window.location.pathname;
+      if (path === '/cashier') {
+        setCurrentPage('cashier');
+      } else {
+        // Untuk semua path lain, gunakan sesi dari sessionStorage
+        const lastPage = sessionStorage.getItem('currentPage');
+        const customerSession = sessionStorage.getItem('customerSession');
+        if (lastPage && customerSession) {
+          setCurrentPage(lastPage);
+        } else {
+          setCurrentPage('customerLanding');
+        }
+      }
+    };
 
-    // Jika ada sesi pelanggan dan halaman terakhir tersimpan,
-    // arahkan ke sana, bukan ke halaman awal.
-    if (lastPage && customerSession) {
-      setCurrentPage(lastPage);
-    }
+    // Panggil sekali saat komponen dimuat
+    handleRouteChange();
+
+    // Tambahkan event listener untuk mendeteksi perubahan URL (jika menggunakan React Router di masa depan)
+    window.addEventListener('popstate', handleRouteChange);
+
+    // Cleanup listener
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+    };
   }, []);
 
-  // 3. Fungsi navigasi sekarang juga menyimpan halaman ke sessionStorage.
+
+  // Fungsi navigasi sekarang juga memperbarui URL dan sessionStorage
   const navigateTo = (page) => {
+    if (page === 'cashier') {
+      window.history.pushState({}, '', '/cashier');
+    } else if (currentPage === 'cashier' && page === 'customerLanding') {
+      window.history.pushState({}, '', '/');
+    }
+
     sessionStorage.setItem('currentPage', page);
     setCurrentPage(page);
   };
 
-  // 4. Semua fungsi state management (addToCart, addOrder, dll.)
-  //    TELAH DIHAPUS. Logika ini sekarang ada di dalam slice Redux.
+  // Semua fungsi state management lain sudah dipindahkan ke Redux
 
   const renderPage = () => {
-    // 5. Props yang dioper ke setiap komponen menjadi jauh lebih sedikit.
-    //    Setiap halaman sekarang mengambil datanya sendiri dari Redux.
     switch (currentPage) {
       case 'customerLanding':
         return <CustomerLandingPage navigateTo={navigateTo} />;
       case 'menu':
-        return <MenuPage />;
+        return <MenuPage navigateTo={navigateTo} />; // Menambahkan navigateTo
       case 'order':
         return <OrderPage navigateTo={navigateTo} />;
       case 'payment':
@@ -53,7 +79,7 @@ function App() {
       case 'receipt':
         return <ReceiptPage navigateTo={navigateTo} />;
       case 'cashier':
-        return <CashierPage />;
+        return <CashierPage navigateTo={navigateTo} />; // Menambahkan navigateTo
       default:
         return <CustomerLandingPage navigateTo={navigateTo} />;
     }
@@ -80,7 +106,6 @@ function App() {
           />
         </div>
 
-        {/* AppHeader sekarang mengambil datanya sendiri dari Redux */}
         <AppHeader currentPage={currentPage} navigateTo={navigateTo} />
 
         {/* Konten Halaman */}
