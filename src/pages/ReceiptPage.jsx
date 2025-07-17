@@ -1,71 +1,90 @@
-// src/pages/ReceiptPage.jsx
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Coffee, Printer, Download, Share2, Home, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
+import { io } from "socket.io-client";
 
-// 1. Impor hooks dan actions dari Redux
+// Impor hooks dan actions yang relevan dari Redux
 import { useDispatch, useSelector } from 'react-redux';
 import {
   selectCurrentOrder,
   selectOrderStatus,
-  fetchCustomerOrderStatus
+  fetchCustomerOrderStatus,
+  updateOrderRealtime, // Action untuk pembaruan real-time
+  clearCurrentOrder
 } from '../features/orders/orderSlice';
-import { selectCustomerSession, clearCustomerSession } from '../features/customer/customerSlice'; // Untuk membersihkan sesi setelah selesai
+import { selectCustomerSession, clearCustomerSession } from '../features/customer/customerSlice';
 
-export default function ReceiptPage({ navigateTo }) { // Hapus prop 'order'
+export default function ReceiptPage({ navigateTo }) {
   const dispatch = useDispatch();
 
-  // 2. Ambil state yang relevan dari Redux store
   const order = useSelector(selectCurrentOrder);
   const status = useSelector(selectOrderStatus);
-  const customerSession = useSelector(selectCustomerSession); //
+  const customerSession = useSelector(selectCustomerSession);
 
-  // 3. Ambil data pesanan terbaru dari backend saat halaman dimuat
+  /**
+   * ##################################################
+   * ## LOGIKA UTAMA YANG DIPERBAIKI ADA DI FUNGSI INI ##
+   * ##################################################
+   */
   useEffect(() => {
-    // Jika ada order di state, kita fetch status terbarunya untuk memastikan data sinkron
-    if (order && order._id) {
-      dispatch(fetchCustomerOrderStatus(order._id));
-    }
-  }, [dispatch, order?._id]); // Jalankan efek ini jika order._id berubah
-  const getDisplayPaymentStatus = () => {
-    const paymentMethodMap = {
-      'bca_va': 'BCA Virtual Account',
-      'qris': 'QRIS'
-    };
+    let orderIdToFetch = null;
 
-    // Jika metode pembayaran online dipilih, langsung tampilkan berhasil
-    if (customerSession?.paymentMethod && (customerSession.paymentMethod === 'bca_va' || customerSession.paymentMethod === 'qris')) {
-      const methodName = paymentMethodMap[customerSession.paymentMethod] || 'Online';
-      return {
-        text: `Pembayaran Berhasil Menggunakan ${methodName}`,
-        className: 'text-green-400'
+    // Prioritaskan ID dari state Redux, jika tidak ada (karena refresh),
+    // coba ambil dari sesi yang tersimpan.
+    if (order && order._id) {
+      orderIdToFetch = order._id;
+    } else if (customerSession && customerSession.orderId) {
+      orderIdToFetch = customerSession.orderId;
+    }
+
+    // Jika ada ID pesanan, ambil data terbaru dan setup listener real-time
+    if (orderIdToFetch) {
+      // Ambil data terbaru saat komponen dimuat (menangani refresh)
+      dispatch(fetchCustomerOrderStatus(orderIdToFetch));
+
+      // Setup koneksi Socket.IO
+      const socket = io(import.meta.env.VITE_API_BASE_URL.replace("/api/v1", ""));
+
+      socket.on('connect', () => {
+        console.log(`ReceiptPage connected to socket server for order: ${orderIdToFetch}`);
+      });
+
+      // Dengarkan event pembaruan status
+      const handleUpdate = (updatedOrder) => {
+        if (updatedOrder._id === orderIdToFetch) {
+          console.log('Real-time update received:', updatedOrder);
+          dispatch(updateOrderRealtime(updatedOrder));
+        }
+      };
+
+      socket.on('order_status_update', handleUpdate);
+      socket.on('payment_update', handleUpdate);
+
+      // Cleanup koneksi saat komponen unmount
+      return () => {
+        socket.disconnect();
       };
     }
+  }, [dispatch, order?._id, customerSession?.orderId]);
 
-    // Fallback ke status dari database
-    return {
-      text: order?.paymentStatus || 'Pending',
-      className: order?.paymentStatus === 'paid' ? 'text-green-400' : 'text-yellow-400'
-    };
-  };
-
-  const paymentInfo = getDisplayPaymentStatus();
 
   const handleBackToHome = () => {
-    dispatch(clearCustomerSession()); // Bersihkan sesi pelanggan saat kembali ke home
+    dispatch(clearCurrentOrder());      // Bersihkan pesanan saat ini dari Redux
+    dispatch(clearCustomerSession()); // Bersihkan sesi pelanggan dari Redux & sessionStorage
     navigateTo('customerLanding');
+    // Lakukan refresh untuk memastikan state benar-benar bersih untuk pelanggan berikutnya
+    window.location.reload();
   };
 
-  // --- Fungsi utilitas (tidak ada perubahan) ---
   const formatPrice = (price) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(price);
   const formatDate = (timestamp) => new Date(timestamp).toLocaleString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const handleAction = (actionName) => toast({ title: "🚧 Fitur dalam Pengembangan", description: `${actionName} belum tersedia.`, duration: 3000 });
   const handlePrint = () => window.print();
+  const handleAction = (actionName) => toast({ title: "🚧 Fitur dalam Pengembangan", description: `${actionName} belum tersedia.`, duration: 3000 });
 
-  // 4. Tampilkan loading spinner atau pesan jika data tidak ada
-  if (status === 'loading') {
+  // Tampilan loading saat pertama kali memuat atau refresh
+  if (status === 'loading' && !order) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center text-center p-6">
         <Loader2 className="w-12 h-12 animate-spin text-amber-400 mb-4" />
@@ -74,6 +93,7 @@ export default function ReceiptPage({ navigateTo }) { // Hapus prop 'order'
     );
   }
 
+  // Tampilan jika order tidak ditemukan sama sekali
   if (!order) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center text-center p-6">
@@ -83,11 +103,11 @@ export default function ReceiptPage({ navigateTo }) { // Hapus prop 'order'
     );
   }
 
+  // Tampilan utama struk
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
       <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
+        initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
         className="w-full max-w-lg mx-auto bg-gray-900/50 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl shadow-black/20"
       >
         <div className="p-8 md:p-10">
@@ -97,23 +117,27 @@ export default function ReceiptPage({ navigateTo }) { // Hapus prop 'order'
             <p className="text-gray-400">Terima kasih atas pesanan Anda!</p>
           </div>
 
-          {/* 5. Tampilkan data dari 'order' state Redux */}
           <div className="space-y-3 border-t border-b border-white/10 py-5">
             <div className="flex justify-between text-gray-300"><span>Nomor Pesanan:</span> <span className="font-medium text-white">{order.orderNumber}</span></div>
             <div className="flex justify-between text-gray-300"><span>Tanggal:</span> <span className="font-medium text-white">{formatDate(order.createdAt)}</span></div>
             <div className="flex justify-between text-gray-300"><span>Pelanggan:</span> <span className="font-medium text-white">{order.customerName}</span></div>
             <div className="flex justify-between text-gray-300"><span>Meja:</span> <span className="font-medium text-white">{order.table?.tableNumber || '-'}</span></div>
             <div className="flex justify-between text-gray-300"><span>Status:</span> <span className="font-bold text-amber-400 capitalize">{order.status}</span></div>
-            <div className="flex justify-between text-gray-300"><span>Pembayaran:</span> <span className={`font-bold text-green-400 capitalize ${paymentInfo.className}`}>{paymentInfo.text}</span></div>
+            <div className="flex justify-between text-gray-300">
+              <span>Pembayaran:</span>
+              <span className={`font-bold capitalize ${order.paymentStatus === 'paid' ? 'text-green-400' : 'text-yellow-400'}`}>
+                {order.paymentStatus}
+              </span>
+            </div>
           </div>
 
           <div className="my-6">
             <h3 className="font-semibold text-white mb-3">Detail Pesanan</h3>
             <div className="space-y-3">
               {order.items.map(item => (
-                <div key={item.product._id} className="flex items-center">
+                <div key={item.product?._id || item._id} className="flex items-center">
                   <div className="flex-1">
-                    <p className="text-white">{item.product.name} <span className="text-gray-400">x{item.quantity}</span></p>
+                    <p className="text-white">{item.product?.name || 'Item Dihapus'} <span className="text-gray-400">x{item.quantity}</span></p>
                     <p className="text-gray-400 text-sm">@{formatPrice(item.price)}</p>
                   </div>
                   <p className="text-white font-medium">{formatPrice(item.price * item.quantity)}</p>
@@ -133,11 +157,8 @@ export default function ReceiptPage({ navigateTo }) { // Hapus prop 'order'
         </div>
       </motion.div>
 
-      {/* ... (bagian tombol aksi tidak ada perubahan, kecuali onClick untuk kembali ke home) ... */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
+        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
         className="mt-8 w-full max-w-lg grid grid-cols-1 sm:grid-cols-2 gap-4 no-print"
       >
         <div className="sm:col-span-2 grid grid-cols-3 gap-4">

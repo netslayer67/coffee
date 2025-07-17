@@ -31,6 +31,7 @@
 		"react-helmet": "^6.1.0",
 		"react-redux": "^9.2.0",
 		"react-router-dom": "^7.6.3",
+		"react-transition-group": "^4.4.5",
 		"redux": "^5.0.1",
 		"socket.io-client": "^4.8.1",
 		"tailwind-merge": "^1.14.0",

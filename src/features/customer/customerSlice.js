@@ -45,12 +45,18 @@ const customerSlice = createSlice({
             state.error = null;
             sessionStorage.removeItem('customerSession');
         },
+        // --- PERBAIKAN LOGIKA DI SINI ---
         updateSessionWithOrder: (state, action) => {
-            const order = action.payload;
+            const order = action.payload; // Payload sekarang adalah objek pesanan lengkap
+
             if (order && order._id) {
+                // Ambil `_id` dari objek order dan simpan sebagai orderId
                 state.session.orderId = order._id;
-                // Simpan juga ke sessionStorage agar persisten
+
+                // Simpan kembali ke sessionStorage agar persisten
                 sessionStorage.setItem('customerSession', JSON.stringify(state.session));
+            } else {
+                console.error("Gagal memperbarui sesi: payload pesanan tidak valid.", order);
             }
         },
         // --- TAMBAHKAN REDUCER INI ---

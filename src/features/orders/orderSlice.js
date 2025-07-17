@@ -11,7 +11,7 @@ const initialState = {
     error: null,
 };
 
-// Async Thunk untuk membuat pesanan baru (tetap ada, tapi akan dipanggil secara internal)
+// Thunk untuk membuat pesanan baru
 export const createOrder = createAsyncThunk(
     'orders/create',
     async (orderData, { rejectWithValue }) => {
@@ -28,16 +28,16 @@ export const handleAddToCart = createAsyncThunk(
     'orders/handleAddToCart',
     async (item, { getState, dispatch, rejectWithValue }) => {
         const { orders, customer } = getState();
-        let currentOrder = orders.currentOrder;
+        let activeOrder = orders.currentOrder;
 
-        // Langkah 1: Jika belum ada pesanan aktif, buat "draft" pesanan baru.
-        if (!currentOrder) {
+        // Jika belum ada pesanan aktif, buat "draft" pesanan baru.
+        if (!activeOrder) {
             const { customerName, tableId } = customer.session;
             if (!customerName || !tableId) {
-                return rejectWithValue('Sesi pelanggan tidak valid. Silakan mulai dari awal.');
+                return rejectWithValue('Sesi pelanggan tidak valid.');
             }
 
-            const orderData = {
+            const draftOrderData = {
                 customerName,
                 table: tableId,
                 items: [{ product: item._id, quantity: 1, price: item.price }],
@@ -46,20 +46,21 @@ export const handleAddToCart = createAsyncThunk(
             };
 
             try {
-                const actionResult = await dispatch(createOrder(orderData));
+                const actionResult = await dispatch(createOrder(draftOrderData));
                 if (createOrder.rejected.match(actionResult)) {
                     return rejectWithValue(actionResult.payload);
                 }
-                // `currentOrder` akan diisi oleh extraReducer dari createOrder
+                activeOrder = actionResult.payload; // Tangkap pesanan yang baru dibuat
             } catch (err) {
                 return rejectWithValue(err.message);
             }
         }
 
-        // Langkah 2: Setelah memastikan pesanan ada, tambahkan item ke state cart
+        // Tambahkan item ke keranjang di state
         dispatch(orderSlice.actions.addToCart(item));
-        // Mengembalikan data item agar bisa diakses jika perlu
-        return item;
+
+        // Kembalikan pesanan yang aktif agar bisa digunakan oleh komponen
+        return activeOrder;
     }
 );
 
@@ -161,15 +162,38 @@ const orderSlice = createSlice({
         },
         // Reducers untuk fungsionalitas real-time
         addOrderRealtime: (state, action) => {
-            state.orders.unshift(action.payload);
+            const exists = state.orders.some(order => order._id === action.payload._id);
+            if (!exists) {
+                state.orders.push(action.payload);
+            }
         },
         updateOrderRealtime: (state, action) => {
             const updatedOrder = action.payload;
+
+            // Perbarui daftar pesanan untuk kasir
             const index = state.orders.findIndex(order => order._id === updatedOrder._id);
             if (index !== -1) {
                 state.orders[index] = updatedOrder;
             }
+
+            // --- TAMBAHKAN LOGIKA INI ---
+            // Jika pesanan yang diperbarui adalah pesanan yang sedang dilihat,
+            // perbarui juga `currentOrder`.
+            if (state.currentOrder && state.currentOrder._id === updatedOrder._id) {
+                state.currentOrder = updatedOrder;
+            }
         },
+        addOrdersBatch: (state, action) => {
+            const newOrders = action.payload;
+
+            newOrders.forEach(newOrder => {
+                const exists = state.orders.some(order => order._id === newOrder._id);
+                if (!exists) {
+                    state.orders.push(newOrder);
+                }
+            });
+        },
+
     },
     extraReducers: (builder) => {
         builder
@@ -225,7 +249,8 @@ export const {
     clearCart,
     clearCurrentOrder,
     addOrderRealtime,
-    updateOrderRealtime
+    updateOrderRealtime,
+    addOrdersBatch // <-- Tambahan baru
 } = orderSlice.actions;
 
 // Ekspor semua selectors yang relevan
