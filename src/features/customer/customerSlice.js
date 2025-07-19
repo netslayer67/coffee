@@ -1,100 +1,99 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from '../../api/axios';
+import { createSlice } from '@reduxjs/toolkit';
+// Axios dan createAsyncThunk tidak lagi diperlukan di file ini
 
+// Coba ambil data sesi customer dari sessionStorage saat aplikasi pertama kali dimuat
 const sessionData = JSON.parse(sessionStorage.getItem('customerSession'));
 
+// Initial state baru yang lebih sederhana
 const initialState = {
     session: sessionData ? sessionData : {
         customerName: null,
+        orderType: null, // 'dine-in' atau 'take away'
         tableId: null,
         tableNumber: null,
         orderId: null,
-        paymentMethod: null, // <-- Tambahkan properti ini
+        paymentMethod: null,
     },
-    status: 'idle',
-    error: null,
+    // Properti status dan error tidak lagi relevan karena tidak ada API call
 };
-
-/**
- * Async Thunk untuk memulai dan memvalidasi sesi pelanggan.
- * Ini akan memanggil endpoint POST /customer/start-session
- */
-export const startCustomerSession = createAsyncThunk(
-    'customer/startSession',
-    async (sessionInfo, { rejectWithValue }) => {
-        try {
-            const response = await axios.post('/customer/start-session', sessionInfo);
-            sessionStorage.setItem('customerSession', JSON.stringify(response.data.sessionData));
-            return response.data;
-        } catch (err) {
-            if (!err.response) throw err;
-            return rejectWithValue(err.response.data);
-        }
-    }
-);
 
 const customerSlice = createSlice({
     name: 'customer',
     initialState,
-    // Reducers sinkron biasa
+    // Reducers sekarang semuanya sinkron
     reducers: {
-        // Aksi untuk membersihkan sesi pelanggan, misalnya setelah selesai bayar
-        clearCustomerSession: (state) => {
-            state.session = { customerName: null, tableId: null, tableNumber: null, orderId: null, paymentMethod: null };
-            state.status = 'idle';
-            state.error = null;
-            sessionStorage.removeItem('customerSession');
+        /**
+         * Action baru untuk memulai sesi di frontend.
+         * Ini akan dipanggil dari CustomerLandingPage.
+         */
+        startSession: (state, action) => {
+            const { customerName, orderType } = action.payload;
+            state.session.customerName = customerName;
+            state.session.orderType = orderType;
+            // Simpan sesi awal ke sessionStorage
+            sessionStorage.setItem('customerSession', JSON.stringify(state.session));
         },
-        // --- PERBAIKAN LOGIKA DI SINI ---
+
+        /**
+         * Action untuk memperbarui sesi dengan data pesanan setelah dibuat.
+         */
         updateSessionWithOrder: (state, action) => {
-            const order = action.payload; // Payload sekarang adalah objek pesanan lengkap
-
+            const order = action.payload;
             if (order && order._id) {
-                // Ambil `_id` dari objek order dan simpan sebagai orderId
                 state.session.orderId = order._id;
-
-                // Simpan kembali ke sessionStorage agar persisten
                 sessionStorage.setItem('customerSession', JSON.stringify(state.session));
-            } else {
-                console.error("Gagal memperbarui sesi: payload pesanan tidak valid.", order);
             }
         },
-        // --- TAMBAHKAN REDUCER INI ---
+
+        /**
+         * Action untuk mengatur meja (jika dine-in).
+         */
+        setTableInfo: (state, action) => {
+            state.session.tableId = action.payload.tableId;
+            state.session.tableNumber = action.payload.tableName;
+            sessionStorage.setItem('customerSession', JSON.stringify(state.session));
+        },
+
+        /**
+         * Action untuk mengatur metode pembayaran.
+         */
         setPaymentMethod: (state, action) => {
             state.session.paymentMethod = action.payload;
             sessionStorage.setItem('customerSession', JSON.stringify(state.session));
         },
-        // Aksi untuk menyimpan nama meja yang dipilih, ini bisa dipanggil
-        // bersamaan dengan tableId untuk pengalaman pengguna yang lebih baik
-        setTableInfo: (state, action) => {
-            state.session.tableId = action.payload.tableId;
-            state.session.tableName = action.payload.tableName;
-        }
+
+        /**
+         * Action untuk membersihkan sesi pelanggan secara menyeluruh.
+         */
+        clearCustomerSession: (state) => {
+            state.session = {
+                customerName: null,
+                orderType: null,
+                tableId: null,
+                tableNumber: null,
+                orderId: null,
+                paymentMethod: null,
+            };
+
+            sessionStorage.removeItem('customerSession');
+            sessionStorage.removeItem('currentOrder');
+            localStorage.removeItem('cart');
+        },
+
     },
-    // Extra reducers untuk menangani lifecycle dari async thunk
-    extraReducers: (builder) => {
-        builder
-            .addCase(startCustomerSession.pending, (state) => {
-                state.status = 'loading';
-                state.error = null;
-            })
-            .addCase(startCustomerSession.fulfilled, (state, action) => {
-                state.status = 'succeeded';
-                state.session = action.payload.sessionData;
-            })
-            .addCase(startCustomerSession.rejected, (state, action) => {
-                state.status = 'failed';
-                state.error = action.payload.message || 'Gagal memulai sesi.';
-            });
-    },
+    // extraReducers dihapus karena `startCustomerSession` sudah tidak ada
 });
 
-// Ekspor aksi dan reducer
-export const { clearCustomerSession, setTableInfo, updateSessionWithOrder, setPaymentMethod } = customerSlice.actions;
+// Ekspor semua action yang relevan
+export const {
+    startSession,
+    updateSessionWithOrder,
+    setTableInfo,
+    setPaymentMethod,
+    clearCustomerSession
+} = customerSlice.actions;
 
-// Ekspor selectors untuk memudahkan akses state di komponen
+// Ekspor selectors
 export const selectCustomerSession = (state) => state.customer.session;
-export const selectCustomerStatus = (state) => state.customer.status;
-export const selectCustomerError = (state) => state.customer.error;
 
 export default customerSlice.reducer;

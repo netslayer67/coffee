@@ -1,100 +1,138 @@
-'use client'
-import React, { useState, useEffect } from 'react'
+'use client';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   QrCode, Landmark, Banknote, CheckCircle, Loader2
-} from 'lucide-react'
-import { useDispatch, useSelector } from 'react-redux'
+} from 'lucide-react';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   createPaymentTransaction,
   processCashPayment,
+  savePaymentMethod, // ✅ Tambahkan ini
   selectTransactionToken,
   selectPaymentStatus,
   clearPaymentState
-} from '../features/payments/paymentSlice'
-import { selectCurrentOrder } from '../features/orders/orderSlice'
-import { setPaymentMethod } from '../features/customer/customerSlice'
-import { Button } from '@/components/ui/button'
-import { toast } from '@/components/ui/use-toast'
+} from '../features/payments/paymentSlice';
+import {
+  selectCurrentOrder,
+  setCurrentOrderFromStorage
+} from '../features/orders/orderSlice';
+import { setPaymentMethod } from '../features/customer/customerSlice';
+import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/use-toast';
 
-export default function PaymentPage({ navigateTo }) {
-  const dispatch = useDispatch()
-  const order = useSelector(selectCurrentOrder)
-  const paymentStatus = useSelector(selectPaymentStatus)
-  const transactionToken = useSelector(selectTransactionToken)
-  const [selectedMethod, setSelectedMethod] = useState(null)
+const paymentOptions = [
+  { id: 'qris', label: 'QRIS', icon: QrCode, desc: 'Bayar dengan QR e-wallet Anda' },
+  { id: 'va', label: 'BCA Virtual Account', icon: Landmark, desc: 'Transfer antar bank BCA' },
+  { id: 'cashier', label: 'Bayar di Kasir', icon: Banknote, desc: 'Tunai/kartu di konter' }
+];
 
+const formatIDR = (amount) =>
+  new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0
+  }).format(amount || 0);
+
+const calculateTotal = (order) => {
+  const subtotal = order?.subtotal ?? (order?.items?.reduce((acc, item) => acc + item.price * item.quantity, 0) ?? 0);
+  const tax = Math.round(subtotal * 0.11);
+  const total = order?.total ?? subtotal + tax;
+  return { subtotal, tax, total };
+};
+
+export default function PaymentPage() {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const order = useSelector(selectCurrentOrder);
+  const paymentStatus = useSelector(selectPaymentStatus);
+  const transactionToken = useSelector(selectTransactionToken);
+  const [selectedMethod, setSelectedMethod] = useState(null);
+
+  // Load order dari sessionStorage
   useEffect(() => {
-    const scriptId = 'midtrans-snap-script'
-    const snapScriptUrl = 'https://app.sandbox.midtrans.com/snap/snap.js'
-    const clientKey = import.meta.env.VITE_MIDTRANS_CLIENT_KEY
+    if (!order) {
+      const cachedOrder = sessionStorage.getItem('currentOrder');
+      if (cachedOrder) {
+        try {
+          dispatch(setCurrentOrderFromStorage(JSON.parse(cachedOrder)));
+        } catch (err) {
+          console.error('❌ Gagal parse currentOrder dari sessionStorage', err);
+        }
+      }
+    }
+  }, [dispatch, order]);
+
+  // Snap.js Midtrans
+  useEffect(() => {
+    const scriptId = 'midtrans-snap-script';
+    const snapScriptUrl = 'https://app.sandbox.midtrans.com/snap/snap.js';
+    const clientKey = import.meta.env.VITE_MIDTRANS_CLIENT_KEY;
 
     if (!document.getElementById(scriptId)) {
-      const script = document.createElement('script')
-      script.id = scriptId
-      script.src = snapScriptUrl
-      script.setAttribute('data-client-key', clientKey)
-      document.body.appendChild(script)
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.src = snapScriptUrl;
+      script.setAttribute('data-client-key', clientKey);
+      document.body.appendChild(script);
     }
 
-    if (transactionToken) {
+    if (transactionToken && order) {
       window.snap.pay(transactionToken, {
         onSuccess: () => {
-          toast({ title: '🎉 Pembayaran Berhasil!', description: 'Pesanan Anda telah dibayar.' })
-          navigateTo('receipt')
+          toast({ title: '🎉 Pembayaran Berhasil!', description: 'Pesanan Anda telah dibayar.' });
+          navigate(`/receipt/${order._id}`);
         },
         onPending: () => {
-          toast({ title: 'Menunggu Pembayaran', description: 'Selesaikan pembayaran Anda.' })
-          navigateTo('receipt')
+          toast({ title: 'Menunggu Pembayaran', description: 'Selesaikan pembayaran Anda.' });
+          navigate(`/receipt/${order._id}`);
         },
         onError: () => {
-          toast({ title: 'Gagal', description: 'Terjadi kesalahan. Silakan coba lagi.', variant: 'destructive' })
-          dispatch(clearPaymentState())
+          toast({ title: 'Gagal', description: 'Terjadi kesalahan. Silakan coba lagi.', variant: 'destructive' });
+          dispatch(clearPaymentState());
         },
         onClose: () => dispatch(clearPaymentState())
-      })
+      });
     }
 
-    return () => dispatch(clearPaymentState())
-  }, [transactionToken, dispatch, navigateTo])
+    return () => dispatch(clearPaymentState());
+  }, [transactionToken, dispatch, navigate, order]);
 
-  const handlePayment = () => {
+  // ✅ Refactor handle submit pembayaran
+  const handleSubmitPayment = async () => {
     if (!selectedMethod || !order) {
-      toast({
+      return toast({
         title: 'Lengkapi Informasi',
         description: 'Pilih metode dan pastikan pesanan tersedia.',
         variant: 'destructive'
-      })
-      return
+      });
     }
 
-    if (['qris', 'bca_va'].includes(selectedMethod)) {
-      dispatch(setPaymentMethod(selectedMethod))
-      dispatch(createPaymentTransaction(order._id))
+    dispatch(setPaymentMethod(selectedMethod));
+
+    if (['qris', 'va'].includes(selectedMethod)) {
+      try {
+        await dispatch(savePaymentMethod({ orderId: order._id, method: selectedMethod })).unwrap();
+        await dispatch(createPaymentTransaction(order._id)).unwrap();
+      } catch (err) {
+        toast({
+          title: 'Gagal Memproses Pembayaran',
+          description: err?.message || 'Terjadi kesalahan saat menyimpan metode pembayaran.',
+          variant: 'destructive'
+        });
+      }
     } else if (selectedMethod === 'cashier') {
-      dispatch(processCashPayment(order))
-      toast({
-        title: 'Bayar di Kasir',
-        description: 'Tunjukkan nomor pesanan Anda.'
-      })
-      navigateTo('receipt')
+      const updatedOrder = { ...order, paymentMethod: selectedMethod };
+      await dispatch(savePaymentMethod({ orderId: order._id, method: selectedMethod })).unwrap();
+      await dispatch(processCashPayment(order._id)).unwrap();
+      dispatch(processCashPayment(updatedOrder));
+      toast({ title: 'Bayar di Kasir', description: 'Tunjukkan nomor pesanan Anda.' });
+      navigate(`/receipt/${order._id}`);
     }
-  }
+  };
 
-  const paymentMethods = [
-    { id: 'qris', name: 'QRIS', icon: QrCode, description: 'Bayar dengan QR e-wallet Anda' },
-    { id: 'bca_va', name: 'BCA Virtual Account', icon: Landmark, description: 'Transfer antar bank BCA' },
-    { id: 'cashier', name: 'Bayar di Kasir', icon: Banknote, description: 'Tunai/kartu di konter' }
-  ]
-
-  const formatPrice = (price) =>
-    new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(price?.toFixed(0) || 0)
-
-  const fallbackTotal = order?.subtotal ? order.subtotal * 1.11 : 0
-  const formattedTotal = formatPrice(order?.total ?? fallbackTotal)
+  const { total } = calculateTotal(order);
+  const formattedTotal = formatIDR(total);
 
   return (
     <div className="min-h-screen text-white px-4 py-10 flex items-center justify-center">
@@ -108,26 +146,24 @@ export default function PaymentPage({ navigateTo }) {
 
         <div className="rounded-3xl p-6 sm:p-10 bg-white/10 backdrop-blur-lg shadow-[0_15px_60px_rgba(255,255,255,0.05)] border border-white/10 space-y-8 transition-all">
           <div className="grid gap-4">
-            {paymentMethods.map((method) => (
+            {paymentOptions.map(({ id, label, icon: Icon, desc }) => (
               <div
-                key={method.id}
-                onClick={() => setSelectedMethod(method.id)}
-                className={`group cursor-pointer flex items-center gap-4 p-5 rounded-2xl transition-all duration-300 border hover:scale-[1.02] transform-gpu relative overflow-hidden
-                  ${selectedMethod === method.id
+                key={id}
+                onClick={() => setSelectedMethod(id)}
+                className={`group cursor-pointer flex items-center gap-4 p-5 rounded-2xl transition-all duration-300 border relative overflow-hidden
+                  ${selectedMethod === id
                     ? 'bg-amber-400/10 border-amber-400'
                     : 'bg-white/5 border-white/10 hover:border-white/20'
                   }`}
-                style={{ perspective: 1000 }}
               >
                 <div className="w-10 h-10 flex items-center justify-center text-amber-400 group-hover:rotate-6 transition-transform duration-300">
-                  <method.icon className="w-7 h-7" />
+                  <Icon className="w-7 h-7" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-base font-medium">{method.name}</p>
-                  <p className="text-sm text-gray-400">{method.description}</p>
+                  <p className="text-base font-medium">{label}</p>
+                  <p className="text-sm text-gray-400">{desc}</p>
                 </div>
-                {selectedMethod === method.id && <CheckCircle className="w-6 h-6 text-green-400" />}
-                {/* Floating shimmer */}
+                {selectedMethod === id && <CheckCircle className="w-6 h-6 text-green-400" />}
                 <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-white/10 via-white/0 to-transparent rotate-45 group-hover:animate-tilt-glow pointer-events-none" />
               </div>
             ))}
@@ -137,22 +173,29 @@ export default function PaymentPage({ navigateTo }) {
             <p className="text-sm text-gray-400">Total Bayar</p>
             <p className="text-3xl font-semibold text-amber-400 mt-1">{formattedTotal}</p>
 
+            {total <= 0 && (
+              <p className="text-sm text-red-400 mt-2">⚠️ Total pembayaran tidak valid.</p>
+            )}
+
             <Button
-              onClick={handlePayment}
-              disabled={paymentStatus === 'loading' || !selectedMethod}
-              className="mt-6 w-full py-4 rounded-xl text-lg font-semibold bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-emerald-400/50 shadow-lg shadow-emerald-500/20"
+              onClick={handleSubmitPayment}
+              disabled={paymentStatus === 'loading' || !selectedMethod || total <= 0}
+              className="mt-6 w-full py-3 sm:py-4 rounded-xl text-sm sm:text-base font-semibold 
+                transition-all duration-300 
+                bg-gradient-to-r from-amber-500 to-orange-500 
+                hover:from-amber-600 hover:to-orange-600 
+                active:scale-[0.97] focus:outline-none focus:ring-2 focus:ring-amber-400/50 
+                shadow-lg shadow-orange-500/20"
             >
               {paymentStatus === 'loading' ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin mr-2" /> Memproses...
-                </>
+                <><Loader2 className="w-5 h-5 animate-spin mr-2" /> Memproses...</>
               ) : (
-                `Bayar Sekarang ${formattedTotal}`
+                <>Bayar Sekarang <span className="ml-1">{formattedTotal}</span></>
               )}
             </Button>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,4 +1,4 @@
-// components/OrderDetailModal.jsx
+'use client';
 import React, { useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { X } from 'lucide-react';
@@ -8,8 +8,10 @@ import {
     fetchCustomerOrderStatus,
     selectCurrentOrder,
     selectOrderStatus,
-    selectOrderError
+    selectOrderError,
+    markOrderAsPaid // ✅ Tambahkan thunk ini
 } from '@/features/orders/orderSlice';
+import { toast } from '@/components/ui/use-toast';
 
 const OrderDetailModal = ({ isOpen, onClose, orderId }) => {
     const dispatch = useDispatch();
@@ -22,6 +24,15 @@ const OrderDetailModal = ({ isOpen, onClose, orderId }) => {
             dispatch(fetchCustomerOrderStatus(orderId));
         }
     }, [isOpen, orderId, dispatch]);
+
+    const handleMarkAsPaid = async () => {
+        try {
+            await dispatch(markOrderAsPaid(order._id)).unwrap();
+            toast({ title: 'Pembayaran dicatat', description: 'Pesanan ditandai sebagai sudah dibayar.' });
+        } catch (err) {
+            toast({ title: 'Gagal', description: err || 'Gagal mengubah status pembayaran.', variant: 'destructive' });
+        }
+    };
 
     return (
         <AnimatePresence>
@@ -36,48 +47,77 @@ const OrderDetailModal = ({ isOpen, onClose, orderId }) => {
                     role="dialog"
                 >
                     <motion.div
-                        className="bg-gray-900 text-white rounded-xl shadow-xl max-w-2xl w-full mx-4 p-6 relative overflow-y-auto max-h-[90vh]"
-                        initial={{ scale: 0.95, opacity: 0 }}
+                        className="bg-white/5 backdrop-blur-lg border border-white/10 p-6 rounded-2xl w-[90%] max-w-md mx-auto text-white shadow-2xl relative"
+                        initial={{ scale: 0.9, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.95, opacity: 0 }}
                         onClick={(e) => e.stopPropagation()}
                     >
+                        {/* Close Button */}
                         <button
                             onClick={onClose}
-                            className="absolute top-4 right-4 text-gray-400 hover:text-white"
+                            className="absolute top-4 right-4 text-white/70 hover:text-white transition"
                             aria-label="Tutup detail pesanan"
                         >
                             <X className="w-5 h-5" />
                         </button>
 
-                        <h2 className="text-xl font-bold mb-4">Detail Pesanan</h2>
+                        <h2 className="text-xl font-semibold text-amber-400 mb-4">
+                            Detail Pesanan
+                        </h2>
 
                         {status === 'loading' ? (
-                            <p className="text-gray-400">Memuat data pesanan...</p>
+                            <p className="text-sm text-white/60">Memuat data pesanan...</p>
                         ) : error ? (
-                            <p className="text-red-400">{error}</p>
+                            <p className="text-sm text-red-400">{error}</p>
                         ) : order ? (
                             <div className="space-y-4 text-sm">
                                 <div>
-                                    <p className="text-gray-400 font-medium">Nomor Pesanan</p>
-                                    <p className="text-lg font-semibold">#{order.orderNumber}</p>
+                                    <p className="text-white/60">Nomor Pesanan</p>
+                                    <p className="text-base font-mono font-semibold text-white">#{order.orderNumber}</p>
                                 </div>
+
                                 <div>
-                                    <p className="text-gray-400 font-medium">Status</p>
-                                    <p className="capitalize font-semibold">{order.status}</p>
+                                    <p className="text-white/60">Status</p>
+                                    <p className="capitalize font-semibold text-white">{order.status}</p>
                                 </div>
+
                                 <div>
-                                    <p className="text-gray-400 font-medium">Pelanggan</p>
+                                    <p className="text-white/60">Status Pembayaran</p>
+                                    <p className="capitalize text-white">{order.paymentStatus || '-'}</p>
+                                </div>
+
+                                <div>
+                                    <p className="text-white/60">Pelanggan</p>
                                     <p>{order.customerName || '-'}</p>
                                 </div>
+
                                 <div>
-                                    <p className="text-gray-400 font-medium">Meja</p>
+                                    <p className="text-white/60">Meja</p>
                                     <p>{order.table?.tableNumber || '-'}</p>
                                 </div>
+
+                                {order.description?.trim() && (
+                                    <div>
+                                        <p className="text-white/60">Catatan / Deskripsi</p>
+                                        <p className="italic text-white">{order.description}</p>
+                                    </div>
+                                )}
+
                                 <div>
-                                    <p className="text-gray-400 font-medium">Item Pesanan</p>
+                                    <p className="text-white/60">Metode Pembayaran</p>
+                                    <p className="text-white">{order.paymentMethod || '-'}</p>
+                                </div>
+
+                                <div>
+                                    <p className="text-white/60">Tipe Pesanan</p>
+                                    <p className="text-white">{order.orderType || '-'}</p>
+                                </div>
+
+                                <div>
+                                    <p className="text-white/60">Item Pesanan</p>
                                     {order.items?.length > 0 ? (
-                                        <ul className="list-disc list-inside space-y-1">
+                                        <ul className="list-disc list-inside space-y-1 text-white">
                                             {order.items.map((item, idx) => (
                                                 <li key={idx}>
                                                     {item.quantity}x {item.productName || item.product?.name} - Rp{item.price.toLocaleString('id-ID')}
@@ -85,13 +125,26 @@ const OrderDetailModal = ({ isOpen, onClose, orderId }) => {
                                             ))}
                                         </ul>
                                     ) : (
-                                        <p className="text-gray-500">Tidak ada item.</p>
+                                        <p className="text-white/50 italic">Tidak ada item.</p>
                                     )}
                                 </div>
+
                                 <div>
-                                    <p className="text-gray-400 font-medium">Total</p>
-                                    <p className="text-amber-400 font-bold text-lg">Rp{order.total.toLocaleString('id-ID')}</p>
+                                    <p className="text-white/60">Total</p>
+                                    <p className="text-lg font-bold text-yellow-400">
+                                        Rp{order.total.toLocaleString('id-ID')}
+                                    </p>
                                 </div>
+
+                                {/* ✅ Tombol Sudah Bayar */}
+                                {order.paymentMethod === 'cashier' && order.paymentStatus !== 'paid' && (
+                                    <button
+                                        onClick={handleMarkAsPaid}
+                                        className="mt-4 w-full py-3 rounded-lg bg-green-500 hover:bg-green-600 text-white font-semibold transition-all"
+                                    >
+                                        ✅ Sudah Bayar
+                                    </button>
+                                )}
                             </div>
                         ) : null}
                     </motion.div>

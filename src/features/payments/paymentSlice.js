@@ -1,50 +1,56 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from '../../api/axios';
 
-
 const initialState = {
-    transactionToken: null, // Untuk menyimpan token Snap.js dari Midtrans
-    transactionRedirectUrl: null, // URL redirect jika menggunakan QRIS
-    currentPayment: null, // Untuk menyimpan detail pembayaran yang sedang berlangsung
-    status: 'idle', // 'idle' | 'loading' | 'succeeded' | 'failed'
+    transactionToken: null,
+    transactionRedirectUrl: null,
+    currentPayment: null,
+    status: 'idle',
     error: null,
 };
 
+
 /**
- * Async Thunk untuk MEMBUAT TRANSAKSI PEMBAYARAN
- * Ini akan memanggil endpoint POST /payments/create-transaction di backend,
- * yang selanjutnya akan membuat transaksi di Midtrans.
+ * 🔄 1. Save Payment Method to Order in DB
+ */
+export const savePaymentMethod = createAsyncThunk(
+    'payments/saveMethod',
+    async ({ orderId, method }, { rejectWithValue }) => {
+        try {
+            const res = await axios.patch(`/orders/${orderId}/payment-method`, { method });
+            return res.data;
+        } catch (err) {
+            return rejectWithValue(err.response?.data || { message: 'Gagal menyimpan metode pembayaran' });
+        }
+    }
+);
+
+
+/**
+ * 💳 2. Create Midtrans Transaction
  */
 export const createPaymentTransaction = createAsyncThunk(
     'payments/createTransaction',
     async (orderId, { rejectWithValue }) => {
         try {
             const response = await axios.post('/payments/create-transaction', { orderId });
-            // Backend akan mengembalikan respons dari Midtrans
             return response.data;
         } catch (err) {
-            if (!err.response) throw err;
-            return rejectWithValue(err.response.data);
+            return rejectWithValue(err.response?.data || { message: 'Gagal membuat transaksi' });
         }
     }
 );
 
 /**
- * Async Thunk untuk menangani pembayaran di KASIR (cash)
- * Ini adalah simulasi, karena tidak ada interaksi API.
- * Kita hanya menandai pesanan untuk dibayar di kasir.
+ * 💵 3. Handle Cash Payment
  */
 export const processCashPayment = createAsyncThunk(
     'payments/processCash',
     async (order, { dispatch }) => {
-        // Di dunia nyata, Anda mungkin akan mengirim notifikasi ke kasir.
-        // Untuk saat ini, kita hanya set state dan mungkin dispatch aksi lain.
-        console.log(`Order ${order.orderNumber} akan dibayar di kasir.`);
-        // Setelah ini, frontend bisa langsung ke halaman struk.
+        console.log(`Order ${order.orderNumber} dibayar di kasir.`);
         return { orderId: order._id, paymentMethod: 'cashier' };
     }
 );
-
 
 const paymentSlice = createSlice({
     name: 'payments',
@@ -60,7 +66,19 @@ const paymentSlice = createSlice({
     },
     extraReducers: (builder) => {
         builder
-            // Kasus untuk membuat transaksi Midtrans
+            // 🔄 Save Payment Method
+            .addCase(savePaymentMethod.pending, (state) => {
+                state.status = 'loading';
+            })
+            .addCase(savePaymentMethod.fulfilled, (state) => {
+                state.status = 'succeeded';
+            })
+            .addCase(savePaymentMethod.rejected, (state, action) => {
+                state.status = 'failed';
+                state.error = action.payload?.message || 'Gagal menyimpan metode pembayaran';
+            })
+
+            // 💳 Midtrans Transaction
             .addCase(createPaymentTransaction.pending, (state) => {
                 state.status = 'loading';
                 state.error = null;
@@ -73,18 +91,17 @@ const paymentSlice = createSlice({
             })
             .addCase(createPaymentTransaction.rejected, (state, action) => {
                 state.status = 'failed';
-                state.error = action.payload?.message || 'Gagal membuat transaksi pembayaran.';
+                state.error = action.payload?.message || 'Gagal membuat transaksi pembayaran';
             })
-            // Kasus untuk pembayaran tunai
-            .addCase(processCashPayment.fulfilled, (state, action) => {
-                // Tidak banyak yang perlu diubah di state, karena
-                // konfirmasi pembayaran akan datang dari kasir melalui webhook/socket.
-                // Ini hanya untuk menandai alur di frontend.
+
+            // 💵 Cash Payment
+            .addCase(processCashPayment.fulfilled, (state) => {
                 state.status = 'succeeded';
             });
     },
 });
 
+// Actions
 export const { clearPaymentState } = paymentSlice.actions;
 
 // Selectors

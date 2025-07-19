@@ -1,22 +1,42 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from '../../api/axios'; // Pastikan path ini benar
+import axios from '../../api/axios';
 
-// Initial state untuk slice pesanan
+const cartFromStorage = JSON.parse(localStorage.getItem('cart')) || [];
+
 const initialState = {
+    cart: cartFromStorage,
+    orders: [],
+    currentOrder: null,
     orderId: null,
-    orders: [], // Untuk menyimpan daftar pesanan dari kasir
-    currentOrder: null, // Untuk menyimpan detail pesanan yang sedang dilihat
-    cart: [], // Keranjang belanja pelanggan
-    status: 'idle', // 'idle' | 'loading' | 'succeeded' | 'failed'
+    status: 'idle',
     error: null,
 };
 
-// Thunk untuk membuat pesanan baru
+// ✅ Thunk: Buat pesanan
 export const createOrder = createAsyncThunk(
     'orders/create',
-    async (orderData, { rejectWithValue }) => {
+    async (orderData, { getState, rejectWithValue }) => {
+        const { cart } = getState().orders;
+
+        if (cart.length === 0) {
+            return rejectWithValue('Keranjang tidak boleh kosong.');
+        }
+
+        const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const formattedItems = cart.map(item => ({
+            product: item._id,
+            quantity: item.quantity,
+            price: item.price,
+        }));
+
+        const finalOrderPayload = {
+            ...orderData,
+            items: formattedItems,
+            subtotal,
+        };
+
         try {
-            const response = await axios.post('/orders', orderData);
+            const response = await axios.post('/orders', finalOrderPayload);
             return response.data;
         } catch (err) {
             return rejectWithValue(err.response?.data?.message || 'Gagal membuat pesanan.');
@@ -24,72 +44,23 @@ export const createOrder = createAsyncThunk(
     }
 );
 
-export const handleAddToCart = createAsyncThunk(
-    'orders/handleAddToCart',
-    async (item, { getState, dispatch, rejectWithValue }) => {
-        const { orders, customer } = getState();
-        let activeOrder = orders.currentOrder;
-
-        // Jika belum ada pesanan aktif, buat "draft" pesanan baru.
-        if (!activeOrder) {
-            const { customerName, tableId } = customer.session;
-            if (!customerName || !tableId) {
-                return rejectWithValue('Sesi pelanggan tidak valid.');
-            }
-
-            const draftOrderData = {
-                customerName,
-                table: tableId,
-                items: [{ product: item._id, quantity: 1, price: item.price }],
-                subtotal: item.price,
-                total: item.price,
-            };
-
-            try {
-                const actionResult = await dispatch(createOrder(draftOrderData));
-                if (createOrder.rejected.match(actionResult)) {
-                    return rejectWithValue(actionResult.payload);
-                }
-                activeOrder = actionResult.payload; // Tangkap pesanan yang baru dibuat
-            } catch (err) {
-                return rejectWithValue(err.message);
-            }
-        }
-
-        // Tambahkan item ke keranjang di state
-        dispatch(orderSlice.actions.addToCart(item));
-
-        // Kembalikan pesanan yang aktif agar bisa digunakan oleh komponen
-        return activeOrder;
-    }
-);
-
-/**
- * Async Thunk untuk MENGAMBIL SEMUA PESANAN (untuk kasir)
- * Memanggil endpoint: GET /orders
- */
+// ✅ Thunk: Ambil semua pesanan (kasir)
 export const fetchOrders = createAsyncThunk(
     'orders/fetchAll',
     async (_, { getState, rejectWithValue }) => {
         try {
-            const token = getState().auth.token; // Mengambil token dari authSlice
+            const token = getState().auth.token;
             const response = await axios.get('/orders', {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
+                headers: { Authorization: `Bearer ${token}` },
             });
             return response.data;
         } catch (err) {
-            if (!err.response) throw err;
-            return rejectWithValue(err.response.data);
+            return rejectWithValue(err.response?.data?.message || 'Gagal mengambil data pesanan.');
         }
     }
 );
 
-/**
- * Async Thunk untuk MEMPERBARUI STATUS PESANAN (oleh kasir)
- * Memanggil endpoint: PATCH /orders/:id/status
- */
+// ✅ Thunk: Update status pesanan
 export const updateOrderStatus = createAsyncThunk(
     'orders/updateStatus',
     async ({ orderId, status }, { getState, rejectWithValue }) => {
@@ -98,24 +69,16 @@ export const updateOrderStatus = createAsyncThunk(
             const response = await axios.patch(
                 `/orders/${orderId}/status`,
                 { status },
-                {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                }
+                { headers: { Authorization: `Bearer ${token}` } }
             );
             return response.data;
         } catch (err) {
-            if (!err.response) throw err;
-            return rejectWithValue(err.response.data);
+            return rejectWithValue(err.response?.data?.message || 'Gagal memperbarui status pesanan.');
         }
     }
 );
 
-/**
- * Async Thunk untuk MENGAMBIL STATUS PESANAN (untuk pelanggan)
- * Memanggil endpoint: GET /orders/status/:id
- */
+// ✅ Thunk: Ambil status pesanan customer
 export const fetchCustomerOrderStatus = createAsyncThunk(
     'orders/fetchStatus',
     async (orderId, { rejectWithValue }) => {
@@ -123,8 +86,33 @@ export const fetchCustomerOrderStatus = createAsyncThunk(
             const response = await axios.get(`/orders/status/${orderId}`);
             return response.data;
         } catch (err) {
-            if (!err.response) throw err;
-            return rejectWithValue(err.response.data);
+            return rejectWithValue(err.response?.data?.message || 'Pesanan tidak ditemukan.');
+        }
+    }
+);
+
+// ✅ Thunk BARU: Tandai pesanan sudah dibayar (kasir)
+// Tambahkan ini di atas
+const getToken = () => {
+    if (typeof window !== 'undefined') {
+        return localStorage.getItem('token');
+    }
+    return null;
+};
+
+export const markOrderAsPaid = createAsyncThunk(
+    'orders/markAsPaid',
+    async (orderId, { rejectWithValue }) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.patch(
+                `/orders/${orderId}/mark-paid`,
+                {}, // tidak perlu body
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            return response.data;
+        } catch (err) {
+            return rejectWithValue(err.response?.data?.message || 'Gagal update status bayar');
         }
     }
 );
@@ -136,31 +124,36 @@ const orderSlice = createSlice({
     reducers: {
         addToCart: (state, action) => {
             const item = action.payload;
-            const existingItem = state.cart.find((cartItem) => cartItem._id === item._id);
-            if (existingItem) {
-                existingItem.quantity += 1;
+            const existing = state.cart.find(i => i._id === item._id);
+            if (existing) {
+                existing.quantity += 1;
             } else {
                 state.cart.push({ ...item, quantity: 1 });
             }
+            localStorage.setItem('cart', JSON.stringify(state.cart));
         },
         updateCartQuantity: (state, action) => {
             const { itemId, quantity } = action.payload;
-            const itemToUpdate = state.cart.find((item) => item._id === itemId);
-            if (itemToUpdate) {
+            const item = state.cart.find((i) => i._id === itemId);
+            if (item) {
                 if (quantity <= 0) {
-                    state.cart = state.cart.filter((item) => item._id !== itemId);
+                    state.cart = state.cart.filter((i) => i._id !== itemId);
                 } else {
-                    itemToUpdate.quantity = quantity;
+                    item.quantity = quantity;
                 }
             }
+            localStorage.setItem('cart', JSON.stringify(state.cart));
         },
         clearCart: (state) => {
             state.cart = [];
+            localStorage.removeItem('cart');
+        },
+        setCurrentOrderFromStorage: (state, action) => {
+            state.currentOrder = action.payload;
         },
         clearCurrentOrder: (state) => {
             state.currentOrder = null;
         },
-        // Reducers untuk fungsionalitas real-time
         addOrderRealtime: (state, action) => {
             const exists = state.orders.some(order => order._id === action.payload._id);
             if (!exists) {
@@ -170,15 +163,11 @@ const orderSlice = createSlice({
         updateOrderRealtime: (state, action) => {
             const updatedOrder = action.payload;
 
-            // Perbarui daftar pesanan untuk kasir
             const index = state.orders.findIndex(order => order._id === updatedOrder._id);
             if (index !== -1) {
                 state.orders[index] = updatedOrder;
             }
 
-            // --- TAMBAHKAN LOGIKA INI ---
-            // Jika pesanan yang diperbarui adalah pesanan yang sedang dilihat,
-            // perbarui juga `currentOrder`.
             if (state.currentOrder && state.currentOrder._id === updatedOrder._id) {
                 state.currentOrder = updatedOrder;
             }
@@ -193,41 +182,26 @@ const orderSlice = createSlice({
                 }
             });
         },
-
     },
     extraReducers: (builder) => {
         builder
-            // Kasus untuk createOrder (dipanggil oleh handleAddToCart)
             .addCase(createOrder.pending, (state) => {
                 state.status = 'loading';
             })
             .addCase(createOrder.fulfilled, (state, action) => {
                 state.status = 'succeeded';
-                state.currentOrder = action.payload; // Simpan pesanan yang baru dibuat
-                // JANGAN KOSONGKAN KERANJANG DI SINI, karena item pertama baru masuk
+                state.currentOrder = action.payload;
+                sessionStorage.setItem('currentOrder', JSON.stringify(action.payload));
             })
             .addCase(createOrder.rejected, (state, action) => {
                 state.status = 'failed';
                 state.error = action.payload;
             })
-            // Kasus untuk handleAddToCart (Thunk utama)
-            .addCase(handleAddToCart.pending, (state) => {
-                state.status = 'loading';
-            })
-            .addCase(handleAddToCart.fulfilled, (state) => {
-                state.status = 'succeeded';
-            })
-            .addCase(handleAddToCart.rejected, (state, action) => {
-                state.status = 'failed';
-                state.error = action.payload;
-            })
-            // Kasus untuk updateOrderStatus
+
             .addCase(updateOrderStatus.fulfilled, (state, action) => {
-                // Pembaruan state sekarang ditangani oleh `updateOrderRealtime` via socket,
-                // jadi kita tidak perlu melakukan apa-apa di sini, cukup ubah status.
                 state.status = 'succeeded';
             })
-            // Kasus untuk fetchCustomerOrderStatus
+
             .addCase(fetchCustomerOrderStatus.pending, (state) => {
                 state.status = 'loading';
             })
@@ -238,11 +212,23 @@ const orderSlice = createSlice({
             .addCase(fetchCustomerOrderStatus.rejected, (state, action) => {
                 state.status = 'failed';
                 state.error = action.payload.message;
+            })
+
+            // ✅ Reducer untuk "Sudah Bayar"
+            .addCase(markOrderAsPaid.pending, (state) => {
+                state.status = 'loading';
+            })
+            .addCase(markOrderAsPaid.fulfilled, (state, action) => {
+                state.status = 'succeeded';
+                state.currentOrder = action.payload;
+            })
+            .addCase(markOrderAsPaid.rejected, (state, action) => {
+                state.status = 'failed';
+                state.error = action.payload;
             });
     },
 });
 
-// Ekspor semua aksi dan reducer yang relevan
 export const {
     addToCart,
     updateCartQuantity,
@@ -250,10 +236,10 @@ export const {
     clearCurrentOrder,
     addOrderRealtime,
     updateOrderRealtime,
-    addOrdersBatch // <-- Tambahan baru
+    addOrdersBatch,
+    setCurrentOrderFromStorage
 } = orderSlice.actions;
 
-// Ekspor semua selectors yang relevan
 export const selectAllOrders = (state) => state.orders.orders;
 export const selectCart = (state) => state.orders.cart;
 export const selectCurrentOrder = (state) => state.orders.currentOrder;

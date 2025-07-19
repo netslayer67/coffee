@@ -61,9 +61,11 @@ const tableSlice = createSlice({
                 state.status = 'loading';
             })
             .addCase(fetchTables.fulfilled, (state, action) => {
+                console.log('✅ Meja berhasil dimuat:', action.payload); // tambahkan log ini
                 state.status = 'succeeded';
                 state.items = action.payload;
             })
+
             .addCase(fetchTables.rejected, (state, action) => {
                 state.status = 'failed';
                 state.error = action.payload?.message || 'Gagal memuat data meja.';
@@ -91,7 +93,7 @@ const tableSlice = createSlice({
 });
 
 // Ekspor selectors
-export const selectAllTables = (state) => state.tables.items;
+export const selectAllTables = (state) => state.tables.items || [];
 export const selectTableStatus = (state) => state.tables.status;
 export const selectTableError = (state) => state.tables.error;
 

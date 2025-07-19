@@ -1,27 +1,16 @@
-// components/OrderCard.jsx
-import React, { useState } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
-import { motion } from 'framer-motion';
 import {
-    Clock,
-    UtensilsCrossed,
-    CheckCircle,
-    XCircle,
-    ArrowRight,
-    Eye,
-    User,
-    MapPin,
-    Info
+    Clock, UtensilsCrossed, CheckCircle, XCircle,
+    ArrowRight, User, MapPin, Info
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import OrderDetailModal from './OrderDetailModal';
-import '../index.css';
 
 const statusConfig = {
-    pending: { label: 'Menunggu', color: 'border-yellow-500', icon: Clock },
-    preparing: { label: 'Disiapkan', color: 'border-blue-500', icon: UtensilsCrossed },
-    ready: { label: 'Siap', color: 'border-green-500', icon: CheckCircle },
-    completed: { label: 'Selesai', color: 'border-gray-600', icon: CheckCircle },
+    pending: { label: 'Menunggu', color: 'border-yellow-400', icon: Clock },
+    preparing: { label: 'Disiapkan', color: 'border-blue-400', icon: UtensilsCrossed },
+    ready: { label: 'Siap', color: 'border-green-400', icon: CheckCircle },
+    completed: { label: 'Selesai', color: 'border-gray-400', icon: CheckCircle },
     cancelled: { label: 'Dibatalkan', color: 'border-red-500', icon: XCircle }
 };
 
@@ -38,8 +27,7 @@ const formatTime = (timestamp) =>
         minute: '2-digit'
     });
 
-const OrderCard = ({ order, onUpdateStatus, onViewReceipt }) => {
-    const [showDetail, setShowDetail] = useState(false);
+const OrderCard = ({ order, onUpdateStatus, onViewReceipt, onShowDetail }) => {
     const statusInfo = statusConfig[order.status] || {};
     const StatusIcon = statusInfo.icon || Clock;
 
@@ -47,7 +35,7 @@ const OrderCard = ({ order, onUpdateStatus, onViewReceipt }) => {
         switch (order.status) {
             case 'pending':
                 return {
-                    label: 'Mulai Siapkan',
+                    label: 'Siapkan Pesanan',
                     action: () => onUpdateStatus(order._id, 'preparing'),
                     icon: ArrowRight,
                     className: 'bg-blue-600 hover:bg-blue-500'
@@ -61,10 +49,10 @@ const OrderCard = ({ order, onUpdateStatus, onViewReceipt }) => {
                 };
             case 'ready':
                 return {
-                    label: 'Selesaikan Pesanan',
+                    label: 'Selesaikan',
                     action: () => onUpdateStatus(order._id, 'completed'),
                     icon: CheckCircle,
-                    className: 'bg-purple-600 hover:bg-purple-500'
+                    className: 'bg-emerald-600 hover:bg-emerald-500'
                 };
             default:
                 return null;
@@ -74,53 +62,40 @@ const OrderCard = ({ order, onUpdateStatus, onViewReceipt }) => {
     const action = getStatusAction();
 
     return (
-        <motion.article
-            layout
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.96 }}
-            role="listitem"
-            aria-label={`Pesanan ${order.orderNumber}`}
-            className={`bg-gray-900/50 border-l-4 ${statusInfo.color} border border-white/10 rounded-2xl p-4 shadow-xl transition-all`}
+        <div
+            className={`bg-white/5 backdrop-blur-lg border-l-4 ${statusInfo.color} border border-white/10 rounded-2xl p-5 shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:shadow-yellow-200/20 transform transition-transform hover:scale-[1.015]`}
         >
             {/* Header */}
-            <header className="flex justify-between items-start gap-2">
-                <div>
-                    <div className="flex gap-3 items-center">
-                        <StatusIcon
-                            className={`w-6 h-6 ${statusInfo.color?.replace('border', 'text')}`}
-                            aria-hidden="true"
-                        />
-                        <h2 className="text-white text-lg font-bold font-mono leading-tight">
-                            {order.orderNumber}
+            <header className="flex justify-between items-start">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                        <StatusIcon className={`w-5 h-5 ${statusInfo.color?.replace('border', 'text')}`} />
+                        <h2 className="text-white font-mono font-bold text-base leading-tight">
+                            #{order.orderNumber}
                         </h2>
                     </div>
-                    <p className="text-sm text-gray-400 ml-9 mt-1">{formatTime(order.createdAt)}</p>
+                    <p className="text-xs text-white/50 ml-7">{formatTime(order.createdAt)}</p>
                 </div>
-                <p
-                    className="text-2xl font-bold text-amber-400"
-                    aria-label={`Total ${formatPrice(order.total)}`}
-                >
-                    {formatPrice(order.total)}
-                </p>
+                <p className="text-amber-400 text-lg font-bold">{formatPrice(order.total)}</p>
             </header>
 
             {/* Customer Info */}
-            <section className="mt-4 space-y-2 bg-white/5 rounded-xl p-3 text-white text-sm leading-relaxed">
+            <div className="mt-4 space-y-2 text-sm text-white bg-white/5 p-3 rounded-xl">
                 <div className="flex items-center gap-3">
-                    <User className="text-gray-500 w-5 h-5" aria-hidden="true" />
-                    <span className="font-medium truncate">{order.customerName}</span>
+                    <User className="w-4 h-4 text-white/40" />
+                    <span className="truncate font-medium">{order.customerName}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                    <MapPin className="text-gray-500 w-5 h-5" aria-hidden="true" />
-                    <span className="font-medium">Meja {order.table?.tableNumber}</span>
+                    <MapPin className="w-4 h-4 text-white/40" />
+                    <span className="truncate font-medium">Meja {order.table?.tableNumber}</span>
                 </div>
-            </section>
+            </div>
 
             {/* Actions */}
-            <footer className="flex justify-end gap-2 mt-4 flex-wrap">
+            <footer className="mt-5 flex flex-wrap justify-end gap-2">
+                {/* Detail */}
                 <Button
-                    onClick={() => setShowDetail(true)}
+                    onClick={() => onShowDetail(order._id)}
                     variant="ghost"
                     className="text-white hover:bg-white/10"
                     size="sm"
@@ -128,25 +103,18 @@ const OrderCard = ({ order, onUpdateStatus, onViewReceipt }) => {
                     <Info className="w-4 h-4 mr-1" /> Detail
                 </Button>
 
-                <OrderDetailModal
-                    isOpen={showDetail}
-                    onClose={() => setShowDetail(false)}
-                    orderId={order._id}
-                />
-
+                {/* Status Update */}
                 {action && (
-                    <Button
+                    <button
                         onClick={action.action}
-                        className={`text-white ${action.className}`}
-                        size="sm"
-                        aria-label={action.label}
+                        className={`text-sm text-white px-4 py-1.5 rounded-full flex items-center gap-1 ${action.className} transition-all`}
                     >
                         {action.label}
-                        <action.icon size={16} className="ml-2" aria-hidden="true" />
-                    </Button>
+                        <action.icon className="w-4 h-4" />
+                    </button>
                 )}
             </footer>
-        </motion.article>
+        </div>
     );
 };
 
@@ -163,7 +131,8 @@ OrderCard.propTypes = {
         })
     }).isRequired,
     onUpdateStatus: PropTypes.func.isRequired,
-    onViewReceipt: PropTypes.func.isRequired
+    onViewReceipt: PropTypes.func.isRequired,
+    onShowDetail: PropTypes.func.isRequired
 };
 
 export default OrderCard;

@@ -1,5 +1,5 @@
 // src/pages/MenuPage.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Star, Search, Flame, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,8 +7,10 @@ import { toast } from '@/components/ui/use-toast';
 
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchProducts, selectAllProducts, selectProductsStatus } from '../features/products/productSlice';
-import { handleAddToCart } from '../features/orders/orderSlice';
-import { updateSessionWithOrder } from '../features/customer/customerSlice';
+// --- PERUBAHAN 1: Ganti import `handleAddToCart` dengan `addToCart` ---
+import { addToCart } from '../features/orders/orderSlice';
+// 'updateSessionWithOrder' tidak lagi diperlukan di sini
+// import { updateSessionWithOrder } from '../features/customer/customerSlice';
 
 const formatPrice = (price) =>
   new Intl.NumberFormat('id-ID', {
@@ -35,8 +37,6 @@ export default function MenuPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredItems, setFilteredItems] = useState([]);
 
-  const observer = useRef(null);
-
   useEffect(() => {
     if (productStatus === 'idle') {
       dispatch(fetchProducts());
@@ -57,24 +57,18 @@ export default function MenuPage() {
     setFilteredItems(items);
   }, [selectedCategory, searchTerm, products]);
 
+  // --- PERUBAHAN 2: Sederhanakan logika `handleAddToCartClick` ---
   const handleAddToCartClick = (item) => {
-    dispatch(handleAddToCart(item))
-      .unwrap()
-      .then((order) => {
-        dispatch(updateSessionWithOrder(order));
-        toast({
-          title: 'Ditambahkan ke Keranjang! 🛒',
-          description: `Pilihan yang bagus: ${item.name}.`,
-          duration: 2000,
-        });
-      })
-      .catch((error) =>
-        toast({
-          title: 'Gagal Menambahkan',
-          description: error || 'Tidak dapat menambahkan item.',
-          variant: 'destructive',
-        })
-      );
+    // Cukup dispatch aksi `addToCart` dengan membawa data item.
+    // Proses ini sekarang sinkron dan tidak perlu menangani promise.
+    dispatch(addToCart(item));
+
+    // Tampilkan notifikasi toast bahwa item berhasil ditambahkan.
+    toast({
+      title: 'Ditambahkan ke Keranjang! 🛒',
+      description: `Pilihan yang bagus: ${item.name}.`,
+      duration: 2000,
+    });
   };
 
   const itemVariants = {
@@ -124,8 +118,8 @@ export default function MenuPage() {
                 setSearchTerm('');
               }}
               className={`px-5 py-2 rounded-full flex items-center gap-2 transition-all duration-300 text-sm font-medium ${selectedCategory === category.id
-                  ? 'bg-amber-500 text-white shadow-md shadow-amber-500/30'
-                  : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:text-white'
+                ? 'bg-amber-500 text-white shadow-md shadow-amber-500/30'
+                : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:text-white'
                 }`}
             >
               <span>{category.icon}</span>
