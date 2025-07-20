@@ -114,6 +114,9 @@ export default function PaymentPage() {
       try {
         await dispatch(savePaymentMethod({ orderId: order._id, method: selectedMethod })).unwrap();
         await dispatch(createPaymentTransaction(order._id)).unwrap();
+        navigate(`/receipt/${order._id}`);
+        // ✅ Force reload after navigation
+        setTimeout(() => window.location.reload(), 100);
       } catch (err) {
         toast({
           title: 'Gagal Memproses Pembayaran',
@@ -128,7 +131,10 @@ export default function PaymentPage() {
       dispatch(processCashPayment(updatedOrder));
       toast({ title: 'Bayar di Kasir', description: 'Tunjukkan nomor pesanan Anda.' });
       navigate(`/receipt/${order._id}`);
+      // ✅ Force reload after navigation
+      setTimeout(() => window.location.reload(), 100);
     }
+
   };
 
   const { total } = calculateTotal(order);
