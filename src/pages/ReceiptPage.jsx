@@ -95,6 +95,18 @@ const ReceiptPage = () => {
     return () => socket.disconnect();
   }, [orderId]);
 
+  // 🔁 Auto Reload Jika Belum Dibayar (Sementara)
+  useEffect(() => {
+    if (!orderId || !order) return;
+    if (order.paymentStatus === 'paid') return;
+
+    const interval = setInterval(() => {
+      dispatch(fetchCustomerOrderStatus(orderId));
+    }, 5000); // Polling setiap 5 detik
+
+    return () => clearInterval(interval);
+  }, [orderId, order?.paymentStatus]);
+
   if (status === 'loading' && !order) {
     return (
       <div className="min-h-screen flex items-center justify-center text-center">
