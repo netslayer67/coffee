@@ -181,6 +181,12 @@ const ReceiptPage = () => {
           <div className="flex justify-between text-gray-300"><span>Subtotal</span><span>{formatPrice(order.subtotal)}</span></div>
           <div className="flex justify-between text-gray-300"><span>Pajak (11%)</span><span>{formatPrice(order.taxAmount)}</span></div>
           <div className="flex justify-between text-lg font-semibold text-amber-400 pt-2"><span>Total Dibayar</span><span>{formatPrice(order.total)}</span></div>
+          <div className="mt-3 text-xs sm:text-sm text-gray-400 text-center px-2">
+            <p className="leading-snug">
+              Note: Jangan lupa <span className="text-white font-semibold">Salin Link</span>-nya ya,
+              biar kamu bisa akses struk ini kapan aja. 😉
+            </p>
+          </div>
         </div>
       </motion.div>
 
