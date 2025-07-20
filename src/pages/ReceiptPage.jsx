@@ -35,6 +35,8 @@ const ReceiptPage = () => {
   const customerSession = JSON.parse(sessionStorage.getItem('customerSession') || '{}');
   const paymentMethod = customerSession?.paymentMethod;
   const isStandaloneReceipt = /^\/receipt\/[^/]+\/[^/]+$/.test(location.pathname);
+  const [hasCopiedLink, setHasCopiedLink] = useState(false);
+
 
   const formatPrice = (price) =>
     new Intl.NumberFormat('id-ID', {
@@ -65,7 +67,9 @@ const ReceiptPage = () => {
     const url = `${window.location.origin}/receipt/${order.customerName}/${orderId}`;
     navigator.clipboard.writeText(url);
     toast({ title: 'Link Disalin', description: 'Struk berhasil disalin ke clipboard.' });
+    setHasCopiedLink(true); // ✅ enable tombol setelah disalin
   };
+
 
   const handleBackToHome = () => {
     setIsExiting(true);
@@ -219,10 +223,16 @@ const ReceiptPage = () => {
         >
           <Button
             onClick={handleBackToHome}
-            className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 text-white font-semibold py-3 rounded-xl text-sm sm:text-base shadow-lg"
+            disabled={!hasCopiedLink}
+            className={`w-full font-semibold py-3 rounded-xl text-sm sm:text-base shadow-lg transition-all duration-200 ${hasCopiedLink
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 text-white'
+                : 'bg-gray-500 text-gray-300 cursor-not-allowed'
+              }`}
           >
             <Home className="w-4 h-4 mr-2" /> Kembali ke Beranda
           </Button>
+
+
         </motion.div>
       )}
     </motion.div>
